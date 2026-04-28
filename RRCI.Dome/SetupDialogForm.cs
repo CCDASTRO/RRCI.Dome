@@ -36,6 +36,7 @@ public partial class SetupDialogForm : Form
 
     private void InitializeComponent()
     {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SetupDialogForm));
             this.btnOK = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.comboPorts = new System.Windows.Forms.ComboBox();
@@ -123,7 +124,7 @@ public partial class SetupDialogForm : Form
             // 
             // txtDeviceId
             // 
-            this.txtDeviceId.Location = new System.Drawing.Point(13, 126);
+            this.txtDeviceId.Location = new System.Drawing.Point(133, 97);
             this.txtDeviceId.Name = "txtDeviceId";
             this.txtDeviceId.Size = new System.Drawing.Size(121, 20);
             this.txtDeviceId.TabIndex = 11;
@@ -132,30 +133,33 @@ public partial class SetupDialogForm : Form
             // lblStatus
             // 
             this.lblStatus.AutoSize = true;
-            this.lblStatus.Location = new System.Drawing.Point(112, 168);
+            this.lblStatus.Location = new System.Drawing.Point(109, 168);
             this.lblStatus.Name = "lblStatus";
             this.lblStatus.Size = new System.Drawing.Size(37, 13);
             this.lblStatus.TabIndex = 12;
             this.lblStatus.Text = "Status";
+            this.lblStatus.Visible = false;
             // 
             // btnTestConnection
             // 
-            this.btnTestConnection.Location = new System.Drawing.Point(179, 97);
+            this.btnTestConnection.Location = new System.Drawing.Point(170, 163);
             this.btnTestConnection.Name = "btnTestConnection";
             this.btnTestConnection.Size = new System.Drawing.Size(75, 23);
             this.btnTestConnection.TabIndex = 13;
             this.btnTestConnection.Text = "Test";
             this.btnTestConnection.UseVisualStyleBackColor = true;
+            this.btnTestConnection.Visible = false;
             this.btnTestConnection.Click += new System.EventHandler(this.btnTestConnection_Click);
             // 
             // button1
             // 
-            this.button1.Location = new System.Drawing.Point(179, 126);
+            this.button1.Location = new System.Drawing.Point(12, 163);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(75, 23);
             this.button1.TabIndex = 15;
             this.button1.Text = "Fetch";
             this.button1.UseVisualStyleBackColor = true;
+            this.button1.Visible = false;
             this.button1.Click += new System.EventHandler(this.button1_Click);
             // 
             // label1
@@ -169,7 +173,7 @@ public partial class SetupDialogForm : Form
             // 
             // SetupDialogForm
             // 
-            this.ClientSize = new System.Drawing.Size(268, 190);
+            this.ClientSize = new System.Drawing.Size(268, 126);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.button1);
             this.Controls.Add(this.btnTestConnection);
@@ -182,7 +186,11 @@ public partial class SetupDialogForm : Form
             this.Controls.Add(this.comboPorts);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.MaximizeBox = false;
             this.Name = "SetupDialogForm";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.Text = "RRCI Setup";
             this.Load += new System.EventHandler(this.SetupDialogForm_Load);
             this.ResumeLayout(false);
             this.PerformLayout();
