@@ -1,21 +1,14 @@
-﻿using System;
+﻿using ASCOM.Utilities;
+using Microsoft.Win32;
+using System;
 using System.IO.Ports;
+using System.Runtime;
 using System.Windows.Forms;
-using ASCOM.Utilities;
 
 public partial class SetupDialogForm : Form
 {
     private const string driverId = "RRCI.Dome";
-
-
-    
-    
-    //private ASCOM.Utilities.Profile profile;
-
-    
-    
-    
-    
+        //private ASCOM.Utilities.Profile profile;
     
     private Button btnOK;
     private Button btnCancel;
@@ -24,19 +17,19 @@ public partial class SetupDialogForm : Form
     private CheckBox chkSafeMode;
     private CheckBox chkRainSensor;
     private CheckBox chkAutoClose;
-    private TextBox txtTimeout;
     private TextBox txtDeviceId;
     private Button btnTestConnection;
-    private TextBox textBox1;
     private Button button1;
+    private Label label1;
     private Label lblStatus;
-    
+    private bool _isLoading = false;
     public SetupDialogForm()
     {
         InitializeComponent();
-       // profile = new ASCOM.Utilities.Profile();
+        // profile = new ASCOM.Utilities.Profile();
         //profile.DeviceType = "Dome";
-        comboPorts.Items.AddRange(SerialPort.GetPortNames());
+        
+        //comboPorts.Items.AddRange(SerialPort.GetPortNames());
     }
 
     
@@ -50,17 +43,16 @@ public partial class SetupDialogForm : Form
             this.chkSafeMode = new System.Windows.Forms.CheckBox();
             this.chkRainSensor = new System.Windows.Forms.CheckBox();
             this.chkAutoClose = new System.Windows.Forms.CheckBox();
-            this.txtTimeout = new System.Windows.Forms.TextBox();
             this.txtDeviceId = new System.Windows.Forms.TextBox();
             this.lblStatus = new System.Windows.Forms.Label();
             this.btnTestConnection = new System.Windows.Forms.Button();
-            this.textBox1 = new System.Windows.Forms.TextBox();
             this.button1 = new System.Windows.Forms.Button();
+            this.label1 = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // btnOK
             // 
-            this.btnOK.Location = new System.Drawing.Point(24, 102);
+            this.btnOK.Location = new System.Drawing.Point(179, 39);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
             this.btnOK.TabIndex = 0;
@@ -70,7 +62,7 @@ public partial class SetupDialogForm : Form
             // 
             // btnCancel
             // 
-            this.btnCancel.Location = new System.Drawing.Point(105, 102);
+            this.btnCancel.Location = new System.Drawing.Point(179, 68);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 1;
@@ -81,25 +73,25 @@ public partial class SetupDialogForm : Form
             // comboPorts
             // 
             this.comboPorts.FormattingEnabled = true;
-            this.comboPorts.Location = new System.Drawing.Point(12, 12);
+            this.comboPorts.Location = new System.Drawing.Point(13, 12);
             this.comboPorts.Name = "comboPorts";
-            this.comboPorts.Size = new System.Drawing.Size(121, 21);
+            this.comboPorts.Size = new System.Drawing.Size(75, 21);
             this.comboPorts.TabIndex = 3;
             this.comboPorts.SelectedIndexChanged += new System.EventHandler(this.comboPorts_SelectedIndexChanged);
             // 
             // comboBaud
             // 
             this.comboBaud.FormattingEnabled = true;
-            this.comboBaud.Location = new System.Drawing.Point(140, 12);
+            this.comboBaud.Location = new System.Drawing.Point(179, 12);
             this.comboBaud.Name = "comboBaud";
-            this.comboBaud.Size = new System.Drawing.Size(121, 21);
+            this.comboBaud.Size = new System.Drawing.Size(75, 21);
             this.comboBaud.TabIndex = 4;
             this.comboBaud.SelectedIndexChanged += new System.EventHandler(this.comboBaud_SelectedIndexChanged);
             // 
             // chkSafeMode
             // 
             this.chkSafeMode.AutoSize = true;
-            this.chkSafeMode.Location = new System.Drawing.Point(28, 33);
+            this.chkSafeMode.Location = new System.Drawing.Point(12, 51);
             this.chkSafeMode.Name = "chkSafeMode";
             this.chkSafeMode.Size = new System.Drawing.Size(82, 17);
             this.chkSafeMode.TabIndex = 5;
@@ -110,7 +102,7 @@ public partial class SetupDialogForm : Form
             // chkRainSensor
             // 
             this.chkRainSensor.AutoSize = true;
-            this.chkRainSensor.Location = new System.Drawing.Point(28, 56);
+            this.chkRainSensor.Location = new System.Drawing.Point(13, 74);
             this.chkRainSensor.Name = "chkRainSensor";
             this.chkRainSensor.Size = new System.Drawing.Size(84, 17);
             this.chkRainSensor.TabIndex = 6;
@@ -121,7 +113,7 @@ public partial class SetupDialogForm : Form
             // chkAutoClose
             // 
             this.chkAutoClose.AutoSize = true;
-            this.chkAutoClose.Location = new System.Drawing.Point(166, 41);
+            this.chkAutoClose.Location = new System.Drawing.Point(13, 97);
             this.chkAutoClose.Name = "chkAutoClose";
             this.chkAutoClose.Size = new System.Drawing.Size(77, 17);
             this.chkAutoClose.TabIndex = 8;
@@ -129,26 +121,18 @@ public partial class SetupDialogForm : Form
             this.chkAutoClose.UseVisualStyleBackColor = true;
             this.chkAutoClose.CheckedChanged += new System.EventHandler(this.chkAutoClose_CheckedChanged);
             // 
-            // txtTimeout
-            // 
-            this.txtTimeout.Location = new System.Drawing.Point(161, 131);
-            this.txtTimeout.Name = "txtTimeout";
-            this.txtTimeout.Size = new System.Drawing.Size(100, 20);
-            this.txtTimeout.TabIndex = 10;
-            this.txtTimeout.TextChanged += new System.EventHandler(this.txtTimeout_TextChanged);
-            // 
             // txtDeviceId
             // 
-            this.txtDeviceId.Location = new System.Drawing.Point(33, 131);
+            this.txtDeviceId.Location = new System.Drawing.Point(13, 126);
             this.txtDeviceId.Name = "txtDeviceId";
-            this.txtDeviceId.Size = new System.Drawing.Size(100, 20);
+            this.txtDeviceId.Size = new System.Drawing.Size(121, 20);
             this.txtDeviceId.TabIndex = 11;
             this.txtDeviceId.TextChanged += new System.EventHandler(this.txtDeviceId_TextChanged);
             // 
             // lblStatus
             // 
             this.lblStatus.AutoSize = true;
-            this.lblStatus.Location = new System.Drawing.Point(183, 218);
+            this.lblStatus.Location = new System.Drawing.Point(112, 168);
             this.lblStatus.Name = "lblStatus";
             this.lblStatus.Size = new System.Drawing.Size(37, 13);
             this.lblStatus.TabIndex = 12;
@@ -156,7 +140,7 @@ public partial class SetupDialogForm : Form
             // 
             // btnTestConnection
             // 
-            this.btnTestConnection.Location = new System.Drawing.Point(197, 102);
+            this.btnTestConnection.Location = new System.Drawing.Point(179, 97);
             this.btnTestConnection.Name = "btnTestConnection";
             this.btnTestConnection.Size = new System.Drawing.Size(75, 23);
             this.btnTestConnection.TabIndex = 13;
@@ -164,32 +148,33 @@ public partial class SetupDialogForm : Form
             this.btnTestConnection.UseVisualStyleBackColor = true;
             this.btnTestConnection.Click += new System.EventHandler(this.btnTestConnection_Click);
             // 
-            // textBox1
-            // 
-            this.textBox1.Location = new System.Drawing.Point(46, 193);
-            this.textBox1.Name = "textBox1";
-            this.textBox1.Size = new System.Drawing.Size(100, 20);
-            this.textBox1.TabIndex = 14;
-            // 
             // button1
             // 
-            this.button1.Location = new System.Drawing.Point(169, 157);
+            this.button1.Location = new System.Drawing.Point(179, 126);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(75, 23);
             this.button1.TabIndex = 15;
-            this.button1.Text = "button1";
+            this.button1.Text = "Fetch";
             this.button1.UseVisualStyleBackColor = true;
             this.button1.Click += new System.EventHandler(this.button1_Click);
             // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(95, 15);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(78, 13);
+            this.label1.TabIndex = 16;
+            this.label1.Text = "Port    -    Baud";
+            // 
             // SetupDialogForm
             // 
-            this.ClientSize = new System.Drawing.Size(284, 261);
+            this.ClientSize = new System.Drawing.Size(268, 190);
+            this.Controls.Add(this.label1);
             this.Controls.Add(this.button1);
-            this.Controls.Add(this.textBox1);
             this.Controls.Add(this.btnTestConnection);
             this.Controls.Add(this.lblStatus);
             this.Controls.Add(this.txtDeviceId);
-            this.Controls.Add(this.txtTimeout);
             this.Controls.Add(this.chkAutoClose);
             this.Controls.Add(this.chkRainSensor);
             this.Controls.Add(this.chkSafeMode);
@@ -203,20 +188,48 @@ public partial class SetupDialogForm : Form
             this.PerformLayout();
 
     }
-
-
-
     private void SetupDialogForm_Load(object sender, EventArgs e)
     {
-        
-        EnableControls(true);
-        LoadSettings();
-    }
-    private bool _isLoading = false;
+        _isLoading = true;
 
+        try
+        {
+            // 1. Populate COM ports FIRST
+            comboPorts.Items.Clear();
+            comboPorts.Items.AddRange(System.IO.Ports.SerialPort.GetPortNames());
+
+            // 2. Populate baud rates
+            comboBaud.Items.Clear();
+            comboBaud.Items.AddRange(new object[]
+            {
+            "9600", "19200", "38400", "57600", "115200"
+            });
+
+            // 3. THEN load registry
+            LoadSettings2();
+        }
+        finally
+        {
+            //LoadSettings2();
+            _isLoading = false;
+        }
+    }
+    
+
+   
+    
+    private void SetComboValue(ComboBox combo, string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return;
+
+        if (combo.Items.Contains(value))
+            combo.SelectedItem = value;
+        else
+            combo.Text = value; // fallback if not in list
+    }
     private void LoadSettings()
     {
-        // 1. Lock the gate so UI events don't trigger SaveSettings()
         _isLoading = true;
 
         try
@@ -225,16 +238,77 @@ public partial class SetupDialogForm : Form
             {
                 p.DeviceType = "Dome";
 
-                // 2. Populate UI - these will trigger events, but _isLoading stops the Save
-                comboPorts.Text =p.GetValue(driverId,"COM", "");
-                comboBaud.Text = p.GetValue(driverId,"Baud", "9600");
-                txtTimeout.Text = p.GetValue(driverId,"Timeout", "5000");
-                txtDeviceId.Text = p.GetValue(driverId,"DeviceId", driverId);
-                textBox1.Text = driverId;
-                chkSafeMode.Checked = ReadBool(p,"SafeMode");
-                chkAutoClose.Checked = ReadBool(p,"AutoClose");
-                chkRainSensor.Checked = ReadBool(p,"RainSensor");
-                
+                string port = p.GetValue(driverId, "COM", "");
+                string baud = p.GetValue(driverId, "Baud", "9600");
+
+                // Populate FIRST
+                comboPorts.Items.Clear();
+                comboPorts.Items.AddRange(SerialPort.GetPortNames());
+
+                comboBaud.Items.Clear();
+                comboBaud.Items.AddRange(new object[] { "9600", "19200", "38400", "57600", "115200" });
+
+                // THEN apply values
+                SetComboValue(comboPorts, port);
+                SetComboValue(comboBaud, baud);
+
+                //txtTimeout.Text = p.GetValue(driverId, "Timeout", "5000");
+                txtDeviceId.Text = p.GetValue(driverId, "DeviceId", driverId);
+
+                chkSafeMode.Checked = ReadBool(p, "SafeMode");
+                chkAutoClose.Checked = ReadBool(p, "AutoClose");
+                chkRainSensor.Checked = ReadBool(p, "RainSensor");
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    private void LoadSettings2()
+    {
+        _isLoading = true;
+        try
+        {
+            string keyPath = @"SOFTWARE\WOW6432Node\ASCOM\Dome Drivers\RRCI.Dome";
+
+            using (RegistryKey key = Registry.LocalMachine.OpenSubKey(keyPath))
+
+            {
+                if (key == null)
+                {
+                    MessageBox.Show("Key not found in HKLM");
+                    return;
+                }
+                //MessageBox.Show("Load: ");
+                string baud = key.GetValue("Baud")?.ToString();
+                string com = key.GetValue("COM")?.ToString();
+                string id = key.GetValue("Description")?.ToString();
+                string timeout = key.GetValue("Timeout")?.ToString();
+                string safe = key.GetValue("SafeMode")?.ToString();
+                string auto = key.GetValue("AutoClose")?.ToString();
+                string rain = key.GetValue("RainSensor")?.ToString();
+
+                chkSafeMode.Checked = safe != null && (safe.Equals("True", StringComparison.OrdinalIgnoreCase) || safe.Equals("1", StringComparison.OrdinalIgnoreCase));
+                chkRainSensor.Checked = rain != null && (rain.Equals("True", StringComparison.OrdinalIgnoreCase) || rain.Equals("1", StringComparison.OrdinalIgnoreCase));
+                chkAutoClose.Checked = auto != null && (auto.Equals("True", StringComparison.OrdinalIgnoreCase) || auto.Equals("1", StringComparison.OrdinalIgnoreCase));
+                comboBaud.Text = baud;
+                txtDeviceId.Text = id;
+                if (!string.IsNullOrWhiteSpace(com))
+                {
+                    if (comboPorts.Items.Contains(com))
+                        comboPorts.SelectedItem = com;
+                    else
+                        comboPorts.Text = com; // fallback only if not in list
+                }
+
+                if (!string.IsNullOrWhiteSpace(baud))
+                {
+                    if (comboBaud.Items.Contains(baud))
+                        comboBaud.SelectedItem = baud;
+                    else
+                        comboBaud.Text = baud;
+                }
             }
         }
         catch (Exception ex)
@@ -243,36 +317,8 @@ public partial class SetupDialogForm : Form
         }
         finally
         {
-            // 3. Unlock the gate so user changes will be saved again
             _isLoading = false;
         }
-    }
-    private void EnableControls(bool enabled)
-    {
-        comboPorts.Enabled = enabled;
-        comboBaud.Enabled = enabled;
-
-        chkSafeMode.Enabled = enabled;
-        chkAutoClose.Enabled = enabled;
-        chkRainSensor.Enabled = enabled;
-        
-
-        txtTimeout.Enabled = enabled;
-        txtDeviceId.Enabled = enabled;
-
-        btnTestConnection.Enabled = enabled;
-        btnOK.Enabled = enabled;
-    }
-    private bool GetBool(Profile p, string key)
-    {
-        string value = p.GetValue(driverId, key, "False");
-        return bool.TryParse(value, out bool result) && result;
-    }
-
-    private bool ReadBool(Profile p, string key)
-    {
-        return p.GetValue(driverId, key, "False")
-                 .Equals("True", StringComparison.OrdinalIgnoreCase);
     }
     private void SaveSettings()
     {
@@ -286,12 +332,30 @@ public partial class SetupDialogForm : Form
             p.WriteValue(driverId, "SafeMode", chkSafeMode.Checked ? "True" : "False");
             p.WriteValue(driverId, "AutoClose", chkAutoClose.Checked ? "True" : "False");
             p.WriteValue(driverId, "RainSensor", chkRainSensor.Checked ? "True" : "False");
-            
 
-            p.WriteValue(driverId, "Timeout", txtTimeout.Text);
+
+            //p.WriteValue(driverId, "Timeout", txtTimeout.Text);
             p.WriteValue(driverId, "DeviceId", txtDeviceId.Text);
+            //MessageBox.Show("Profile sub-key: " + driverId);
+            //string regPath = $@"HKEY_CURRENT_USER\Software\ASCOM\{p.DeviceType}\{driverId}";
+            //MessageBox.Show("ASCOM Profile path:\n" + regPath);
+            //string key = $@"Software\ASCOM\Dome\{driverId}";
+            //MessageBox.Show("About to write to HKCU:\n" + key);
+
+            //p.WriteValue(driverId, "TestWrite", DateTime.Now.ToString());
         }
     }
+
+
+    
+    
+    private bool ReadBool(Profile p, string key)
+    {
+        string val = p.GetValue(driverId, key, "False");
+        return val.Equals("True", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("1", StringComparison.OrdinalIgnoreCase);
+    }
+    
 
 
     private void checkBox5_CheckedChanged(object sender, EventArgs e)
@@ -303,7 +367,7 @@ public partial class SetupDialogForm : Form
 
     private void button3_Click(object sender, EventArgs e)
     {
-
+        if (_isLoading) return;
     }
 
     private void btnOK_Click(object sender, EventArgs e)
@@ -409,15 +473,41 @@ public partial class SetupDialogForm : Form
        
     }
 
-    private void txtTimeout_TextChanged(object sender, EventArgs e)
-    {
-        if (_isLoading) return;
-
-        
-    }
+    
 
     private void button1_Click(object sender, EventArgs e)
     {
-        LoadSettings();
+        //LoadSettings();
+        
+
+        string keyPath = @"SOFTWARE\WOW6432Node\ASCOM\Dome Drivers\RRCI.Dome";
+
+        using (RegistryKey key = Registry.LocalMachine.OpenSubKey(keyPath))
+        {
+            if (key == null)
+            {
+                MessageBox.Show("Key not found in HKLM");
+                return;
+            }
+
+            string baud = key.GetValue("Baud")?.ToString();
+            string com = key.GetValue("COM")?.ToString();
+            string id = key.GetValue("DeviceId")?.ToString();
+            string timeout = key.GetValue("Timeout")?.ToString();
+            string safe = key.GetValue("SafeMode")?.ToString();
+            string auto = key.GetValue("AutoClose")?.ToString();
+            string rain = key.GetValue("RainSensor")?.ToString();
+            
+            chkSafeMode.Checked = safe != null && (safe.Equals("True", StringComparison.OrdinalIgnoreCase) || safe.Equals("1", StringComparison.OrdinalIgnoreCase));
+            chkRainSensor.Checked = rain != null && (rain.Equals("True", StringComparison.OrdinalIgnoreCase) || rain.Equals("1", StringComparison.OrdinalIgnoreCase));
+            chkAutoClose.Checked = auto != null && (auto.Equals("True", StringComparison.OrdinalIgnoreCase) || auto.Equals("1", StringComparison.OrdinalIgnoreCase));
+            comboBaud.Text = baud;
+            comboPorts.Text = com;
+            txtDeviceId.Text = id;
+            //txtTimeout.Text = timeout;
+            
+
+            //MessageBox.Show($"Baud={baud}\nCOM={com}");
+        }
     }
 }

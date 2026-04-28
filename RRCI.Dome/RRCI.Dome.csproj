@@ -86,10 +86,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CommandQueue.cs" />
-    <Compile Include="ReliableSerial.cs" />
-    <Compile Include="RoofSimulator.cs" />
-    <Compile Include="RoofStateManager.cs" />
     <Compile Include="Dome.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SetupDialogForm.cs">
