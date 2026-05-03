@@ -443,7 +443,7 @@ namespace RRCI.DomeDriver
         public string DriverInfo =>
             "Driver for Arduino Roof Controller";
 
-        public string DriverVersion => "1.0";
+        public string DriverVersion => "1.1.2";
 
         public short InterfaceVersion => 2;
 
