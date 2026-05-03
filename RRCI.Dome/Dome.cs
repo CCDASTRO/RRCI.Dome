@@ -26,7 +26,7 @@ namespace RRCI.DomeDriver
 
                 profile.Register(driverID, "RRCI Dome Driver");
 
-                profile.WriteValue(driverID, "CLSID", t.GUID.ToString("B"));
+                //profile.WriteValue(driverID, "CLSID", t.GUID.ToString("B"));
                 profile.WriteValue(driverID, "Description", "RRCI Dome Driver");
             }
         }
@@ -252,24 +252,13 @@ namespace RRCI.DomeDriver
             }
         }
         private string GetSetting(string key, string defaultValue)
-        {
-            string keyPath = @"SOFTWARE\WOW6432Node\ASCOM\Dome Drivers\RRCI.Dome";
-
-            using (var reg = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(keyPath))
-            {
-                if (reg == null)
-                    return defaultValue;
-
-                object val = reg.GetValue(key);
-
-                if (val == null)
-                    return defaultValue;
-
-                string s = val.ToString();
-
-                return string.IsNullOrWhiteSpace(s) ? defaultValue : s;
-            }
-        }
+{
+    using (Profile profile = new Profile())
+    {
+        profile.DeviceType = "Dome";
+        return profile.GetValue("RRCI.Dome", key, "", defaultValue);
+    }
+}
 
         private void StartHeartbeat()
         {
