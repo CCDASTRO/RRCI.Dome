@@ -1,9 +1,9 @@
 // ======================================================
 // ASCOM Roll-Off Roof Controller Firmware
 // Driver-Compatible Stable Version
-//
+// Chuck Faranda - https://ccdastro.net
 // Designed for:
-// - ASCOM Dome Driver
+// - ASCOM RRCI Dome Driver https://github.com/CCDASTRO/RRCI.Dome
 // - NINA / SGP / Voyager compatibility
 //
 // FIXES:
