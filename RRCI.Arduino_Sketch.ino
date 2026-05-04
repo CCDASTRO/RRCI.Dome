@@ -1,21 +1,20 @@
 // ======================================================
 // ASCOM Roll-Off Roof Controller Firmware
-// Driver-Compatible Stable Version
+// Single-Relay Toggle Version (Garage Door Style)
 // Chuck Faranda - https://ccdastro.net
+//
 // Designed for:
-// - ASCOM RRCI Dome Driver https://github.com/CCDASTRO/RRCI.Dome
+// - ASCOM RRCI Dome Driver
 // - NINA / SGP / Voyager compatibility
 //
-// FIXES:
-// - No startup serial spam
-// - No unsolicited status spam
-// - Clean request/response protocol
-// - Reliable ping/pong handshake
-// - Sensor-priority shutter state
-// - Proper CLOSED/OPEN reporting for NINA
-// - Safe relay interlocking
-// - Timeout protection
-// - Heartbeat fail-safe
+// USE ONLY if your roof controller uses ONE momentary
+// trigger input like a garage door opener:
+//
+// Pulse = Open -> Stop -> Close -> Stop
+//
+// IMPORTANT:
+// This is less safe than dedicated OPEN/CLOSE relays.
+// Limit switches are REQUIRED.
 // ======================================================
 
 
@@ -23,16 +22,16 @@
 // PINS
 // ======================================================
 
-#define PIN_OPENED    11
-#define PIN_CLOSED    12
-#define PIN_SAFE      13
+#define PIN_OPENED     11
+#define PIN_CLOSED     12
+#define PIN_SAFE       13
 
-#define RELAY_OPEN     7
-#define RELAY_CLOSE    6
-#define RELAY_SENSOR   5
-#define RELAY_SPARE    4
+#define RELAY_TRIGGER   7   // single trigger relay
+#define RELAY_UNUSED    6
+#define RELAY_SENSOR    5
+#define RELAY_SPARE     4
 
-#define LED_PIN       10
+#define LED_PIN        10
 
 
 // ======================================================
@@ -61,6 +60,7 @@ unsigned long lastHeartbeat = 0;
 
 const unsigned long MOVE_TIMEOUT = 60000;         // 60 sec
 const unsigned long HEARTBEAT_TIMEOUT = 120000;   // 2 min
+const unsigned long RELAY_PULSE_TIME = 1000;      // 1 sec button press
 
 
 // ======================================================
@@ -75,9 +75,9 @@ byte bufferIndex = 0;
 // SENSOR LOGIC
 // ======================================================
 
-#define SAFE_ACTIVE    LOW
-#define OPEN_ACTIVE    LOW
-#define CLOSE_ACTIVE   LOW
+#define SAFE_ACTIVE     LOW
+#define OPEN_ACTIVE     LOW
+#define CLOSE_ACTIVE    LOW
 
 bool IsSafe()
 {
@@ -107,31 +107,23 @@ void setup()
   pinMode(PIN_CLOSED, INPUT_PULLUP);
   pinMode(PIN_SAFE, INPUT_PULLUP);
 
-  pinMode(RELAY_OPEN, OUTPUT);
-  pinMode(RELAY_CLOSE, OUTPUT);
+  pinMode(RELAY_TRIGGER, OUTPUT);
+  pinMode(RELAY_UNUSED, OUTPUT);
   pinMode(RELAY_SENSOR, OUTPUT);
   pinMode(RELAY_SPARE, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
 
   StopAllRelays();
 
-  // IMPORTANT:
-  // No startup serial output.
-  // ASCOM requires clean serial connect.
+  // No startup serial output
+  // ASCOM requires clean connect
 
-  // Initialize real state from sensors
   if (IsClosed())
-  {
     state = CLOSED;
-  }
   else if (IsOpen())
-  {
     state = OPEN;
-  }
   else
-  {
     state = IDLE;
-  }
 
   lastHeartbeat = millis();
 }
@@ -183,7 +175,6 @@ void ReadSerial()
 
 void ProcessCommand(const char* cmd)
 {
-  // refresh heartbeat for any valid command
   lastHeartbeat = millis();
 
   if (strcmp(cmd, "ping") == 0)
@@ -246,7 +237,6 @@ void UpdateStateMachine()
 
       break;
 
-
     case CLOSING:
 
       if (IsClosed())
@@ -262,10 +252,30 @@ void UpdateStateMachine()
 
       break;
 
-
     default:
       break;
   }
+}
+
+
+// ======================================================
+// RELAY PULSE ACTION
+// ======================================================
+
+void PulseTriggerRelay()
+{
+  StopAllRelays();
+
+  // Optional interlock relay enable
+  digitalWrite(RELAY_SENSOR, HIGH);
+  delay(200);
+
+  // Simulate garage door button press
+  digitalWrite(RELAY_TRIGGER, HIGH);
+  delay(RELAY_PULSE_TIME);
+  digitalWrite(RELAY_TRIGGER, LOW);
+
+  moveStart = millis();
 }
 
 
@@ -287,14 +297,7 @@ void StartOpen()
     return;
   }
 
-  StopAllRelays();
-
-  digitalWrite(RELAY_SENSOR, HIGH);
-  delay(200);
-
-  digitalWrite(RELAY_OPEN, HIGH);
-
-  moveStart = millis();
+  PulseTriggerRelay();
   state = OPENING;
 }
 
@@ -313,14 +316,7 @@ void StartClose()
     return;
   }
 
-  StopAllRelays();
-
-  digitalWrite(RELAY_SENSOR, HIGH);
-  delay(200);
-
-  digitalWrite(RELAY_CLOSE, HIGH);
-
-  moveStart = millis();
+  PulseTriggerRelay();
   state = CLOSING;
 }
 
@@ -344,8 +340,8 @@ void StopAll()
 
 void StopAllRelays()
 {
-  digitalWrite(RELAY_OPEN, LOW);
-  digitalWrite(RELAY_CLOSE, LOW);
+  digitalWrite(RELAY_TRIGGER, LOW);
+  digitalWrite(RELAY_UNUSED, LOW);
   digitalWrite(RELAY_SENSOR, LOW);
   digitalWrite(RELAY_SPARE, LOW);
 }
@@ -358,9 +354,6 @@ void StopAllRelays()
 void SendStatus()
 {
   Serial.print("STATE:");
-
-  // SENSOR PRIORITY
-  // This is critical for NINA compatibility
 
   if (IsOpen())
   {
