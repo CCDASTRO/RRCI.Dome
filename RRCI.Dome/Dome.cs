@@ -1,8 +1,24 @@
-﻿using ASCOM.DeviceInterface;
+﻿// =====================================================
+// RRCI ASCOM Dome Driver
+//
+// Includes:
+// - Proper Opening / Closing reporting
+// - 2 second movement grace delay after open/close command
+// - Slewing state support
+// - 120 second timeout protection
+// - Sensor confirmation required for Open/Closed
+// - Abort support
+// - Stable serial communication
+// - ASCOM Dome compliance
+// =====================================================
+
+using ASCOM;
+using ASCOM.DeviceInterface;
 using ASCOM.Utilities;
 using System;
 using System.Collections;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace RRCI.DomeDriver
 {
@@ -14,45 +30,30 @@ namespace RRCI.DomeDriver
     {
         private const string DriverId = "RRCI.Dome";
         private const int DefaultTimeoutMs = 3000;
-        private const int HeartbeatIntervalMs = 30000;
+        private const int MotionTimeoutSeconds = 120;
+        private const int SensorGraceDelaySeconds = 2;
 
         private readonly TraceLogger tl;
+        private readonly ArrayList supportedActions = new ArrayList();
 
         private Serial serial;
-        private System.Threading.Timer heartbeatTimer;
 
         private bool connected;
         private bool moving;
 
-        private readonly ArrayList supportedActions = new ArrayList();
+        private bool openingCommandActive;
+        private bool closingCommandActive;
+
+        private DateTime motionStartTime;
+
+        private ShutterState lastKnownShutterState =
+            ShutterState.shutterError;
 
         public Dome()
         {
             tl = new TraceLogger("", DriverId);
-            tl.Enabled = GetTraceEnabled();
-
+            tl.Enabled = true;
             tl.LogMessage("Constructor", "Driver starting");
-        }
-
-        // =====================================================
-        // TRACE LOGGING
-        // =====================================================
-
-        private bool GetTraceEnabled()
-        {
-            using (Profile profile = new Profile())
-            {
-                profile.DeviceType = "Dome";
-
-                string value = profile.GetValue(
-                    DriverId,
-                    "TraceLogger",
-                    "",
-                    "False");
-
-                return value.Equals("True", StringComparison.OrdinalIgnoreCase) ||
-                       value.Equals("1", StringComparison.OrdinalIgnoreCase);
-            }
         }
 
         // =====================================================
@@ -65,8 +66,6 @@ namespace RRCI.DomeDriver
 
             set
             {
-                tl.LogMessage("Connected Set", value.ToString());
-
                 if (value == connected)
                     return;
 
@@ -79,25 +78,33 @@ namespace RRCI.DomeDriver
 
         private void Connect()
         {
-            tl.LogMessage("Connect", "Starting connection");
+            tl.LogMessage("Connect", "Connecting");
 
             try
             {
                 serial = new Serial();
 
-                string port = GetSetting("COM", "");
-                string baud = GetSetting("Baud", "9600");
+                using (Profile profile = new Profile())
+                {
+                    profile.DeviceType = "Dome";
 
-                if (string.IsNullOrWhiteSpace(port))
-                    throw new ASCOM.DriverException("COM port not configured");
+                    string port = profile.GetValue(
+                        DriverId,
+                        "COM",
+                        "",
+                        "");
 
-                serial.PortName = port;
-                serial.Speed = GetSerialSpeed(baud);
+                    if (string.IsNullOrWhiteSpace(port))
+                        throw new DriverException("COM port not configured");
+
+                    serial.PortName = port;
+                    serial.Speed = SerialSpeed.ps9600;
+                }
 
                 serial.Connected = true;
 
-                // Arduino USB reset delay
-                System.Threading.Thread.Sleep(2500);
+                // Arduino reset delay
+                Thread.Sleep(2000);
 
                 try
                 {
@@ -107,46 +114,16 @@ namespace RRCI.DomeDriver
                 {
                 }
 
-                bool handshakeOk = false;
-
-                for (int i = 0; i < 3; i++)
-                {
-                    try
-                    {
-                        string reply = Query("ping", 3000);
-
-                        if (!string.IsNullOrWhiteSpace(reply) &&
-                            reply.Contains("PONG"))
-                        {
-                            handshakeOk = true;
-                            break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        tl.LogMessage("Connect", "Handshake failed: " + ex.Message);
-                        System.Threading.Thread.Sleep(500);
-                    }
-                }
-
-                if (!handshakeOk)
-                    throw new ASCOM.DriverException(
-                        "No PONG response from controller");
-
                 connected = true;
 
-                StartHeartbeat();
-
-                tl.LogMessage(
-                    "Connect",
-                    $"Connected to {port} @ {baud}");
+                tl.LogMessage("Connect", "Connected");
             }
             catch (Exception ex)
             {
-                tl.LogMessage("Connect", "FAILED: " + ex.Message);
+                tl.LogMessage("Connect", ex.ToString());
 
-                CleanupSerial();
                 connected = false;
+                CleanupSerial();
 
                 throw;
             }
@@ -156,11 +133,13 @@ namespace RRCI.DomeDriver
         {
             tl.LogMessage("Disconnect", "Disconnecting");
 
-            StopHeartbeat();
-            CleanupSerial();
-
             connected = false;
             moving = false;
+
+            openingCommandActive = false;
+            closingCommandActive = false;
+
+            CleanupSerial();
 
             tl.LogMessage("Disconnect", "Disconnected");
         }
@@ -187,47 +166,10 @@ namespace RRCI.DomeDriver
             }
         }
 
-        // =====================================================
-        // HEARTBEAT
-        // =====================================================
-
-        private void StartHeartbeat()
+        private void EnsureConnected()
         {
-            StopHeartbeat();
-
-            heartbeatTimer = new System.Threading.Timer(
-                _ => SendHeartbeat(),
-                null,
-                HeartbeatIntervalMs,
-                HeartbeatIntervalMs);
-
-            tl.LogMessage("Heartbeat", "Started");
-        }
-
-        private void StopHeartbeat()
-        {
-            if (heartbeatTimer != null)
-            {
-                heartbeatTimer.Dispose();
-                heartbeatTimer = null;
-            }
-
-            tl.LogMessage("Heartbeat", "Stopped");
-        }
-
-        private void SendHeartbeat()
-        {
-            if (serial == null || !serial.Connected)
-                return;
-
-            try
-            {
-                Query("ping", 1000);
-            }
-            catch (Exception ex)
-            {
-                tl.LogMessage("Heartbeat", "Ping failed: " + ex.Message);
-            }
+            if (!connected)
+                throw new NotConnectedException("Dome not connected");
         }
 
         // =====================================================
@@ -236,10 +178,9 @@ namespace RRCI.DomeDriver
 
         private string Query(string command, int timeoutMs = DefaultTimeoutMs)
         {
-            if (serial == null || !serial.Connected)
-                throw new ASCOM.NotConnectedException("Dome not connected");
+            EnsureConnected();
 
-            lock (serial)
+            lock (this)
             {
                 try
                 {
@@ -259,7 +200,8 @@ namespace RRCI.DomeDriver
 
                             if (!string.IsNullOrWhiteSpace(response))
                             {
-                                response = response.Trim();
+                                response =
+                                    response.Trim().ToUpperInvariant();
 
                                 tl.LogMessage("RX", response);
 
@@ -268,11 +210,11 @@ namespace RRCI.DomeDriver
                         }
                         catch
                         {
-                            System.Threading.Thread.Sleep(20);
+                            Thread.Sleep(20);
                         }
                     }
 
-                    throw new ASCOM.DriverException(
+                    throw new DriverException(
                         "Timeout waiting for response");
                 }
                 catch (Exception ex)
@@ -283,66 +225,185 @@ namespace RRCI.DomeDriver
             }
         }
 
-        private SerialSpeed GetSerialSpeed(string baud)
-        {
-            switch (baud)
-            {
-                case "1200": return SerialSpeed.ps1200;
-                case "2400": return SerialSpeed.ps2400;
-                case "4800": return SerialSpeed.ps4800;
-                case "9600": return SerialSpeed.ps9600;
-                case "19200": return SerialSpeed.ps19200;
-                case "38400": return SerialSpeed.ps38400;
-                case "57600": return SerialSpeed.ps57600;
-                case "115200": return SerialSpeed.ps115200;
-                default: return SerialSpeed.ps9600;
-            }
-        }
-
-        private string GetSetting(string key, string defaultValue)
-        {
-            using (Profile profile = new Profile())
-            {
-                profile.DeviceType = "Dome";
-
-                return profile.GetValue(
-                    DriverId,
-                    key,
-                    "",
-                    defaultValue);
-            }
-        }
-
-        private void EnsureConnected()
-        {
-            if (!connected)
-                throw new ASCOM.NotConnectedException(
-                    "Dome not connected");
-        }
-
         // =====================================================
-        // SHUTTER
+        // SHUTTER STATUS
         // =====================================================
 
         public ShutterState ShutterStatus
         {
             get
             {
-                string status = Query("status");
+                EnsureConnected();
 
-                if (status.Contains("OPENING"))
-                    return ShutterState.shutterOpening;
+                try
+                {
+                    string status = Query("status");
 
-                if (status.Contains("CLOSING"))
-                    return ShutterState.shutterClosing;
+                    bool openSensorActive =
+                        status.Contains("OPEN");
 
-                if (status.Contains("OPEN"))
-                    return ShutterState.shutterOpen;
+                    bool closedSensorActive =
+                        status.Contains("CLOSED");
 
-                if (status.Contains("CLOSED"))
-                    return ShutterState.shutterClosed;
+                    // -------------------------------------------------
+                    // MOVING STATE HAS PRIORITY
+                    // -------------------------------------------------
 
-                return ShutterState.shutterError;
+                    if (moving)
+                    {
+                        double elapsed =
+                            (DateTime.Now - motionStartTime).TotalSeconds;
+
+                        // ---------------------------------------------
+                        // Motion timeout protection
+                        // ---------------------------------------------
+
+                        if (elapsed > MotionTimeoutSeconds)
+                        {
+                            tl.LogMessage(
+                                "ShutterStatus",
+                                "Motion timeout reached");
+
+                            moving = false;
+                            openingCommandActive = false;
+                            closingCommandActive = false;
+
+                            lastKnownShutterState =
+                                ShutterState.shutterError;
+
+                            return lastKnownShutterState;
+                        }
+
+                        // ---------------------------------------------
+                        // Ignore sensors briefly after command so stale
+                        // sensor states do not instantly report
+                        // OPEN/CLOSED before movement starts
+                        // ---------------------------------------------
+
+                        if (elapsed < SensorGraceDelaySeconds)
+                        {
+                            if (openingCommandActive)
+                                return ShutterState.shutterOpening;
+
+                            if (closingCommandActive)
+                                return ShutterState.shutterClosing;
+                        }
+
+                        // ---------------------------------------------
+                        // OPEN command active
+                        // ---------------------------------------------
+
+                        if (openingCommandActive)
+                        {
+                            if (openSensorActive)
+                            {
+                                tl.LogMessage(
+                                    "ShutterStatus",
+                                    "OPEN sensor confirmed");
+
+                                moving = false;
+                                openingCommandActive = false;
+                                closingCommandActive = false;
+
+                                lastKnownShutterState =
+                                    ShutterState.shutterOpen;
+
+                                return lastKnownShutterState;
+                            }
+
+                            return ShutterState.shutterOpening;
+                        }
+
+                        // ---------------------------------------------
+                        // CLOSE command active
+                        // ---------------------------------------------
+
+                        if (closingCommandActive)
+                        {
+                            if (closedSensorActive)
+                            {
+                                tl.LogMessage(
+                                    "ShutterStatus",
+                                    "CLOSED sensor confirmed");
+
+                                moving = false;
+                                openingCommandActive = false;
+                                closingCommandActive = false;
+
+                                lastKnownShutterState =
+                                    ShutterState.shutterClosed;
+
+                                return lastKnownShutterState;
+                            }
+
+                            return ShutterState.shutterClosing;
+                        }
+                    }
+
+                    // -------------------------------------------------
+                    // IDLE SENSOR REPORTING
+                    // -------------------------------------------------
+
+                    // Roof fully open
+                    if (openSensorActive)
+                    {
+                        moving = false;
+                        openingCommandActive = false;
+                        closingCommandActive = false;
+
+                        lastKnownShutterState =
+                            ShutterState.shutterOpen;
+
+                        return lastKnownShutterState;
+                    }
+
+                    // Roof fully closed
+                    if (closedSensorActive)
+                    {
+                        moving = false;
+                        openingCommandActive = false;
+                        closingCommandActive = false;
+
+                        lastKnownShutterState =
+                            ShutterState.shutterClosed;
+
+                        return lastKnownShutterState;
+                    }
+
+                    // ---------------------------------------------
+                    // Neither sensor active:
+                    // roof is partially open OR mechanical failure
+                    // Never keep stale OPEN/CLOSED here
+                    // ---------------------------------------------
+
+                    tl.LogMessage(
+                        "ShutterStatus",
+                        "No sensors active — reporting ERROR");
+
+                    moving = false;
+                    openingCommandActive = false;
+                    closingCommandActive = false;
+
+                    lastKnownShutterState =
+                        ShutterState.shutterError;
+
+                    return lastKnownShutterState;
+                }
+                catch (Exception ex)
+                {
+                    tl.LogMessage(
+                        "ShutterStatus",
+                        ex.Message);
+
+                    moving = false;
+                    openingCommandActive = false;
+                    closingCommandActive = false;
+
+                    lastKnownShutterState =
+                        ShutterState.shutterError;
+
+                    return lastKnownShutterState;
+                }
             }
         }
 
@@ -350,56 +411,65 @@ namespace RRCI.DomeDriver
         {
             EnsureConnected();
 
-            tl.LogMessage("OpenShutter", "Opening");
+            tl.LogMessage("OpenShutter", "Opening roof");
+
+            string response = Query("open", 10000);
+
+            if (!response.StartsWith("OK"))
+                throw new DriverException(response);
 
             moving = true;
+            openingCommandActive = true;
+            closingCommandActive = false;
 
-            try
-            {
-                string response = Query("open", 10000);
+            motionStartTime = DateTime.Now;
 
-                if (!response.StartsWith("OK"))
-                    throw new ASCOM.DriverException(response);
-            }
-            finally
-            {
-                moving = false;
-            }
+            lastKnownShutterState =
+                ShutterState.shutterOpening;
         }
 
         public void CloseShutter()
         {
             EnsureConnected();
 
-            tl.LogMessage("CloseShutter", "Closing");
+            tl.LogMessage("CloseShutter", "Closing roof");
+
+            string response = Query("close", 10000);
+
+            if (!response.StartsWith("OK"))
+                throw new DriverException(response);
 
             moving = true;
+            openingCommandActive = false;
+            closingCommandActive = true;
 
-            try
-            {
-                string response = Query("close", 10000);
+            motionStartTime = DateTime.Now;
 
-                if (!response.StartsWith("OK"))
-                    throw new ASCOM.DriverException(response);
-            }
-            finally
-            {
-                moving = false;
-            }
+            lastKnownShutterState =
+                ShutterState.shutterClosing;
         }
 
         public void AbortSlew()
         {
-            moving = false;
+            tl.LogMessage("AbortSlew", "Abort requested");
 
             try
             {
-                Query("abort");
+                Query("abort", 3000);
             }
             catch
             {
             }
+
+            moving = false;
+            openingCommandActive = false;
+            closingCommandActive = false;
+
+            lastKnownShutterState =
+                ShutterState.shutterError;
         }
+
+        public bool Slewing => moving;
 
         // =====================================================
         // COMMANDS
@@ -443,9 +513,11 @@ namespace RRCI.DomeDriver
         public string DriverInfo =>
             "Driver for Arduino Roof Controller";
 
-        public string DriverVersion => "1.1.3";
+        public string DriverVersion =>
+            "1.2.1";
 
-        public short InterfaceVersion => 2;
+        public short InterfaceVersion =>
+            2;
 
         public string Name =>
             "Rolling Roof Controller Interface";
@@ -465,42 +537,41 @@ namespace RRCI.DomeDriver
         public bool CanSetAzimuth => false;
         public bool CanSetShutter => true;
 
-        public bool Slewing => moving;
-
         public bool Slaved
         {
             get => false;
             set
             {
                 if (value)
-                    throw new ASCOM.PropertyNotImplementedException(
-                        "Slaved", false);
+                    throw new PropertyNotImplementedException(
+                        "Slaved",
+                        false);
             }
         }
 
         public double Altitude =>
-            throw new ASCOM.PropertyNotImplementedException();
+            throw new PropertyNotImplementedException();
 
         public double Azimuth =>
-            throw new ASCOM.PropertyNotImplementedException();
+            throw new PropertyNotImplementedException();
 
         public void FindHome() =>
-            throw new ASCOM.MethodNotImplementedException();
+            throw new MethodNotImplementedException();
 
         public void Park() =>
-            throw new ASCOM.MethodNotImplementedException();
+            throw new MethodNotImplementedException();
 
         public void SetPark() =>
-            throw new ASCOM.MethodNotImplementedException();
+            throw new MethodNotImplementedException();
 
         public void SlewToAltitude(double altitude) =>
-            throw new ASCOM.MethodNotImplementedException();
+            throw new MethodNotImplementedException();
 
         public void SlewToAzimuth(double azimuth) =>
-            throw new ASCOM.MethodNotImplementedException();
+            throw new MethodNotImplementedException();
 
         public void SyncToAzimuth(double azimuth) =>
-            throw new ASCOM.MethodNotImplementedException();
+            throw new MethodNotImplementedException();
 
         // =====================================================
         // DISPOSE
