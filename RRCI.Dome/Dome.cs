@@ -51,11 +51,35 @@ namespace RRCI.DomeDriver
 
         public Dome()
         {
+                     
+            
             tl = new TraceLogger("", DriverId);
             tl.Enabled = true;
             tl.LogMessage("Constructor", "Driver starting");
         }
+        [ComRegisterFunction]
+        public static void RegisterASCOM(Type t)
+        {
+            using (Profile profile = new Profile())
+            {
+                profile.DeviceType = "Dome";
 
+                profile.Register(
+                    "RRCI.Dome",
+                    "Rolling Roof Controller Interface");
+            }
+        }
+
+        [ComUnregisterFunction]
+        public static void UnregisterASCOM(Type t)
+        {
+            using (Profile profile = new Profile())
+            {
+                profile.DeviceType = "Dome";
+
+                profile.Unregister("RRCI.Dome");
+            }
+        }
         // =====================================================
         // CONNECTION
         // =====================================================
