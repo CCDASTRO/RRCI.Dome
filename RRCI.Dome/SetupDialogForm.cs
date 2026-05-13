@@ -17,6 +17,7 @@ public partial class SetupDialogForm : Form
     private CheckBox chkTraceLogging;
     private TextBox txtDeviceId;
     private Label label1;
+    private CheckBox chkMotionSensor;
     private bool _isLoading = false;
 
     public SetupDialogForm()
@@ -36,11 +37,12 @@ public partial class SetupDialogForm : Form
             this.chkTraceLogging = new System.Windows.Forms.CheckBox();
             this.txtDeviceId = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
+            this.chkMotionSensor = new System.Windows.Forms.CheckBox();
             this.SuspendLayout();
             // 
             // btnOK
             // 
-            this.btnOK.Location = new System.Drawing.Point(98, 95);
+            this.btnOK.Location = new System.Drawing.Point(98, 120);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
             this.btnOK.TabIndex = 7;
@@ -50,7 +52,7 @@ public partial class SetupDialogForm : Form
             // 
             // btnCancel
             // 
-            this.btnCancel.Location = new System.Drawing.Point(179, 95);
+            this.btnCancel.Location = new System.Drawing.Point(179, 120);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 8;
@@ -116,7 +118,7 @@ public partial class SetupDialogForm : Form
             // 
             // txtDeviceId
             // 
-            this.txtDeviceId.Location = new System.Drawing.Point(113, 67);
+            this.txtDeviceId.Location = new System.Drawing.Point(113, 92);
             this.txtDeviceId.Name = "txtDeviceId";
             this.txtDeviceId.Size = new System.Drawing.Size(141, 20);
             this.txtDeviceId.TabIndex = 6;
@@ -131,9 +133,20 @@ public partial class SetupDialogForm : Form
             this.label1.TabIndex = 9;
             this.label1.Text = "Port      Baud";
             // 
+            // chkMotionSensor
+            // 
+            this.chkMotionSensor.AutoSize = true;
+            this.chkMotionSensor.Location = new System.Drawing.Point(137, 68);
+            this.chkMotionSensor.Name = "chkMotionSensor";
+            this.chkMotionSensor.Size = new System.Drawing.Size(120, 17);
+            this.chkMotionSensor.TabIndex = 10;
+            this.chkMotionSensor.Text = "Roof Motion Sensor";
+            this.chkMotionSensor.UseVisualStyleBackColor = true;
+            // 
             // SetupDialogForm
             // 
-            this.ClientSize = new System.Drawing.Size(266, 130);
+            this.ClientSize = new System.Drawing.Size(266, 147);
+            this.Controls.Add(this.chkMotionSensor);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.comboPorts);
             this.Controls.Add(this.comboBaud);
@@ -196,6 +209,10 @@ public partial class SetupDialogForm : Form
             chkRainSensor.Checked = ReadBool(profile, "RainSensor");
             chkAutoClose.Checked = ReadBool(profile, "AutoClose");
 
+            // New motion sensor option
+            chkMotionSensor.Checked = ReadBool(profile, "MotionSensor");
+
+            // Existing trace logging checkbox
             chkTraceLogging.Checked = profile.GetValue(
                 driverId,
                 "TraceLogger",
@@ -224,6 +241,11 @@ public partial class SetupDialogForm : Form
             profile.WriteValue(driverId, "AutoClose",
                 chkAutoClose.Checked ? "True" : "False");
 
+            // New motion sensor option
+            profile.WriteValue(driverId, "MotionSensor",
+                chkMotionSensor.Checked ? "True" : "False");
+
+            // Existing trace logging option
             profile.WriteValue(driverId, "TraceLogger",
                 chkTraceLogging.Checked ? "True" : "False");
         }

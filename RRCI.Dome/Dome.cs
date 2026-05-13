@@ -1,18 +1,4 @@
-﻿// =====================================================
-// RRCI ASCOM Dome Driver
-//
-// Includes:
-// - Proper Opening / Closing reporting
-// - 2 second movement grace delay after open/close command
-// - Slewing state support
-// - 120 second timeout protection
-// - Sensor confirmation required for Open/Closed
-// - Abort support
-// - Stable serial communication
-// - ASCOM Dome compliance
-// =====================================================
-
-using ASCOM;
+﻿using ASCOM;
 using ASCOM.DeviceInterface;
 using ASCOM.Utilities;
 using System;
@@ -51,22 +37,24 @@ namespace RRCI.DomeDriver
 
         public Dome()
         {
-                     
-            
             tl = new TraceLogger("", DriverId);
-            tl.Enabled = true;
+
+            // Match SetupDialogForm.cs which stores this as "TraceLogger"
+            tl.Enabled = GetBoolSetting("TraceLogger", false);
+
             tl.LogMessage("Constructor", "Driver starting");
         }
+
+        #region COM Registration
+
         [ComRegisterFunction]
         public static void RegisterASCOM(Type t)
         {
             using (Profile profile = new Profile())
             {
                 profile.DeviceType = "Dome";
-
-                profile.Register(
-                    "RRCI.Dome",
-                    "Rolling Roof Controller Interface");
+                profile.Register(DriverId, "Rolling Roof Controller Interface");
+                profile.WriteValue(DriverId, "Description", "Rolling Roof Controller Interface");
             }
         }
 
@@ -76,18 +64,62 @@ namespace RRCI.DomeDriver
             using (Profile profile = new Profile())
             {
                 profile.DeviceType = "Dome";
-
-                profile.Unregister("RRCI.Dome");
+                profile.Unregister(DriverId);
             }
         }
-        // =====================================================
-        // CONNECTION
-        // =====================================================
+
+        #endregion
+
+        #region Profile Helpers
+
+        private string GetSetting(string key, string defaultValue)
+        {
+            using (Profile profile = new Profile())
+            {
+                profile.DeviceType = "Dome";
+                return profile.GetValue(DriverId, key, "", defaultValue);
+            }
+        }
+
+        private bool GetBoolSetting(string key, bool defaultValue)
+        {
+            string value = GetSetting(
+                key,
+                defaultValue ? "True" : "False");
+
+            return value.Equals("True", StringComparison.OrdinalIgnoreCase) ||
+                   value.Equals("1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private SerialSpeed GetSerialSpeed(string baud)
+        {
+            switch (baud)
+            {
+                case "1200": return SerialSpeed.ps1200;
+                case "2400": return SerialSpeed.ps2400;
+                case "4800": return SerialSpeed.ps4800;
+                case "9600": return SerialSpeed.ps9600;
+                case "19200": return SerialSpeed.ps19200;
+                case "38400": return SerialSpeed.ps38400;
+                case "57600": return SerialSpeed.ps57600;
+                case "115200": return SerialSpeed.ps115200;
+                default: return SerialSpeed.ps9600;
+            }
+        }
+
+        private bool SafeModeEnabled =>
+            GetBoolSetting("SafeMode", false);
+
+        private bool MotionSensorEnabled =>
+            GetBoolSetting("MotionSensor", false);
+
+        #endregion
+
+        #region Connection
 
         public bool Connected
         {
             get => connected;
-
             set
             {
                 if (value == connected)
@@ -108,27 +140,19 @@ namespace RRCI.DomeDriver
             {
                 serial = new Serial();
 
-                using (Profile profile = new Profile())
-                {
-                    profile.DeviceType = "Dome";
+                string port = GetSetting("COM", "");
+                string baud = GetSetting("Baud", "9600");
 
-                    string port = profile.GetValue(
-                        DriverId,
-                        "COM",
-                        "",
-                        "");
+                if (string.IsNullOrWhiteSpace(port))
+                    throw new DriverException("COM port not configured");
 
-                    if (string.IsNullOrWhiteSpace(port))
-                        throw new DriverException("COM port not configured");
-
-                    serial.PortName = port;
-                    serial.Speed = SerialSpeed.ps9600;
-                }
+                serial.PortName = port;
+                serial.Speed = GetSerialSpeed(baud);
 
                 serial.Connected = true;
 
-                // Arduino reset delay
-                Thread.Sleep(2000);
+                // Allow Arduino to reset after serial connection.
+                Thread.Sleep(2500);
 
                 try
                 {
@@ -139,6 +163,19 @@ namespace RRCI.DomeDriver
                 }
 
                 connected = true;
+
+                // Verify communications.
+                string pong = Query("ping", 5000);
+                if (!pong.Contains("PONG"))
+                    throw new DriverException("No PONG response from controller");
+
+                // Send runtime configuration to the Arduino firmware.
+                Query(SafeModeEnabled ? "setsafe:1" : "setsafe:0");
+                Query(MotionSensorEnabled ? "setmotion:1" : "setmotion:0");
+
+                tl.LogMessage(
+                    "Connect",
+                    $"SafeMode={SafeModeEnabled}, MotionSensor={MotionSensorEnabled}");
 
                 tl.LogMessage("Connect", "Connected");
             }
@@ -182,6 +219,7 @@ namespace RRCI.DomeDriver
                     {
                     }
 
+                    serial.Dispose();
                     serial = null;
                 }
             }
@@ -196,9 +234,9 @@ namespace RRCI.DomeDriver
                 throw new NotConnectedException("Dome not connected");
         }
 
-        // =====================================================
-        // SERIAL QUERY
-        // =====================================================
+        #endregion
+
+        #region Serial Query
 
         private string Query(string command, int timeoutMs = DefaultTimeoutMs)
         {
@@ -238,8 +276,7 @@ namespace RRCI.DomeDriver
                         }
                     }
 
-                    throw new DriverException(
-                        "Timeout waiting for response");
+                    throw new DriverException("Timeout waiting for response");
                 }
                 catch (Exception ex)
                 {
@@ -249,9 +286,9 @@ namespace RRCI.DomeDriver
             }
         }
 
-        // =====================================================
-        // SHUTTER STATUS
-        // =====================================================
+        #endregion
+
+        #region Shutter Status
 
         public ShutterState ShutterStatus
         {
@@ -263,25 +300,29 @@ namespace RRCI.DomeDriver
                 {
                     string status = Query("status");
 
-                    bool openSensorActive =
-                        status.Contains("OPEN");
+                    // Firmware explicitly reports an error state.
+                    if (status.Contains("ERROR"))
+                    {
+                        moving = false;
+                        openingCommandActive = false;
+                        closingCommandActive = false;
 
-                    bool closedSensorActive =
-                        status.Contains("CLOSED");
+                        lastKnownShutterState =
+                            ShutterState.shutterError;
 
-                    // -------------------------------------------------
-                    // MOVING STATE HAS PRIORITY
-                    // -------------------------------------------------
+                        return lastKnownShutterState;
+                    }
 
+                    bool openSensorActive = status.Contains("OPEN");
+                    bool closedSensorActive = status.Contains("CLOSED");
+
+                    // Moving state takes priority.
                     if (moving)
                     {
                         double elapsed =
                             (DateTime.Now - motionStartTime).TotalSeconds;
 
-                        // ---------------------------------------------
-                        // Motion timeout protection
-                        // ---------------------------------------------
-
+                        // Driver-side timeout protection.
                         if (elapsed > MotionTimeoutSeconds)
                         {
                             tl.LogMessage(
@@ -298,12 +339,7 @@ namespace RRCI.DomeDriver
                             return lastKnownShutterState;
                         }
 
-                        // ---------------------------------------------
-                        // Ignore sensors briefly after command so stale
-                        // sensor states do not instantly report
-                        // OPEN/CLOSED before movement starts
-                        // ---------------------------------------------
-
+                        // Ignore sensors briefly after issuing command.
                         if (elapsed < SensorGraceDelaySeconds)
                         {
                             if (openingCommandActive)
@@ -312,10 +348,6 @@ namespace RRCI.DomeDriver
                             if (closingCommandActive)
                                 return ShutterState.shutterClosing;
                         }
-
-                        // ---------------------------------------------
-                        // OPEN command active
-                        // ---------------------------------------------
 
                         if (openingCommandActive)
                         {
@@ -337,10 +369,6 @@ namespace RRCI.DomeDriver
 
                             return ShutterState.shutterOpening;
                         }
-
-                        // ---------------------------------------------
-                        // CLOSE command active
-                        // ---------------------------------------------
 
                         if (closingCommandActive)
                         {
@@ -364,11 +392,7 @@ namespace RRCI.DomeDriver
                         }
                     }
 
-                    // -------------------------------------------------
-                    // IDLE SENSOR REPORTING
-                    // -------------------------------------------------
-
-                    // Roof fully open
+                    // Idle sensor reporting.
                     if (openSensorActive)
                     {
                         moving = false;
@@ -381,7 +405,6 @@ namespace RRCI.DomeDriver
                         return lastKnownShutterState;
                     }
 
-                    // Roof fully closed
                     if (closedSensorActive)
                     {
                         moving = false;
@@ -394,15 +417,10 @@ namespace RRCI.DomeDriver
                         return lastKnownShutterState;
                     }
 
-                    // ---------------------------------------------
-                    // Neither sensor active:
-                    // roof is partially open OR mechanical failure
-                    // Never keep stale OPEN/CLOSED here
-                    // ---------------------------------------------
-
+                    // Neither sensor active while idle.
                     tl.LogMessage(
                         "ShutterStatus",
-                        "No sensors active — reporting ERROR");
+                        "No sensors active - reporting ERROR");
 
                     moving = false;
                     openingCommandActive = false;
@@ -415,9 +433,7 @@ namespace RRCI.DomeDriver
                 }
                 catch (Exception ex)
                 {
-                    tl.LogMessage(
-                        "ShutterStatus",
-                        ex.Message);
+                    tl.LogMessage("ShutterStatus", ex.Message);
 
                     moving = false;
                     openingCommandActive = false;
@@ -495,9 +511,9 @@ namespace RRCI.DomeDriver
 
         public bool Slewing => moving;
 
-        // =====================================================
-        // COMMANDS
-        // =====================================================
+        #endregion
+
+        #region Commands
 
         public void CommandBlind(string command, bool raw)
         {
@@ -515,13 +531,13 @@ namespace RRCI.DomeDriver
             return Query(command);
         }
 
-        // =====================================================
-        // REQUIRED ASCOM MEMBERS
-        // =====================================================
+        #endregion
+
+        #region ASCOM Required Members
 
         public string Action(string actionName, string actionParameters)
         {
-            return "";
+            return string.Empty;
         }
 
         public ArrayList SupportedActions => supportedActions;
@@ -538,10 +554,9 @@ namespace RRCI.DomeDriver
             "Driver for Arduino Roof Controller";
 
         public string DriverVersion =>
-            "1.2.1";
+            "1.3.0";
 
-        public short InterfaceVersion =>
-            2;
+        public short InterfaceVersion => 2;
 
         public string Name =>
             "Rolling Roof Controller Interface";
@@ -567,9 +582,7 @@ namespace RRCI.DomeDriver
             set
             {
                 if (value)
-                    throw new PropertyNotImplementedException(
-                        "Slaved",
-                        false);
+                    throw new PropertyNotImplementedException("Slaved", false);
             }
         }
 
@@ -597,9 +610,9 @@ namespace RRCI.DomeDriver
         public void SyncToAzimuth(double azimuth) =>
             throw new MethodNotImplementedException();
 
-        // =====================================================
-        // DISPOSE
-        // =====================================================
+        #endregion
+
+        #region IDisposable
 
         public void Dispose()
         {
@@ -610,5 +623,7 @@ namespace RRCI.DomeDriver
             tl.Enabled = false;
             tl.Dispose();
         }
+
+        #endregion
     }
 }
