@@ -44,6 +44,7 @@ setsafe:1	Enable scope safety
 setsafe:0	Disable scope safety
 setmotion:1	Enable Hall sensor monitoring
 setmotion:0	Disable Hall sensor monitoring
+
 2. Dome.cs Changes
 
 The ASCOM dome driver was enhanced significantly.
@@ -120,6 +121,7 @@ RainSensor
 AutoClose
 MotionSensor
 TraceLogger
+
 4. User Workflow
 Open the ASCOM Setup Dialog.
 Select COM port and baud rate.
@@ -136,6 +138,7 @@ During operation:
 Firmware monitors limit switches.
 Optional Hall sensor confirms motion.
 Errors are reported if movement stalls.
+
 5. Backward Compatibility
 
 If both checkboxes are unchecked:
@@ -143,11 +146,13 @@ If both checkboxes are unchecked:
 Firmware behaves exactly like your original version.
 No Hall sensor is required.
 Safe input is ignored.
+
 6. Recommended Hardware for Hall Sensor
 A magnet attached to a moving wheel, pulley, or sprocket
 Hall-effect sensor mounted nearby
 Output wired to Arduino D2
 GND and +5V as required by the sensor module
+
 7. Error Detection Improvements
 
 The system can now detect:
@@ -158,6 +163,7 @@ Motor running but roof not moving
 Unsafe scope position
 Motion timeout
 Missing serial response
+
 8. ASCOM Trace Logs
 
 When Trace Logging is enabled, ASCOM logs include:
@@ -172,7 +178,7 @@ These logs are useful for troubleshooting.
 
 Final Result
 
-Your roll-off roof controller now provides:
+RRCI now provides:
 
 ASCOM-compliant dome control
 Optional scope safety interlock
@@ -182,4 +188,4 @@ Detailed trace logging
 Robust serial communications
 Full backward compatibility with existing hardware
 
-This makes the system substantially more reliable and better able to detect real mechanical problems during roof operation.
+This with the hall effect movement sensor makes the system substantially more reliable and better able to detect real mechanical problems during roof operation.
