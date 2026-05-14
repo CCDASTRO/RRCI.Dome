@@ -157,7 +157,7 @@ public partial class SetupDialogForm : Form
             this.Controls.Add(this.txtDeviceId);
             this.Controls.Add(this.btnOK);
             this.Controls.Add(this.btnCancel);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
             this.MaximizeBox = false;
             this.Name = "SetupDialogForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
