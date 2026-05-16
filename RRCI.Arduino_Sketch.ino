@@ -1,77 +1,55 @@
-// ======================================================
+// ====================================================== 
 // ASCOM Roll-Off Roof Controller Firmware
 // Single Relay Toggle Version
 // ACTIVE HIGH RELAY VERSION
 //
 // Chuck Faranda - https://ccdastro.net
 //
-// Designed for:
-// - ASCOM RRCI Dome Driver
-// - NINA / Voyager / SGP compatibility
-//
-// STABLE VERSION
-//
-// FEATURES
-// ------------------------------------------------------
-// - Safe relay startup
-// - No relay activation on boot/upload
-// - Single momentary trigger relay
-// - ACTIVE HIGH relay board support
-// - Live sensor state reporting
-// - Reliable OPEN/CLOSED detection
-// - OPENING/CLOSING software states
-// - Manual switch test compatible
-// - Clean ASCOM serial protocol
-// - No blocking state logic
-// - No false ERROR states
-//
-// USE ONLY WITH:
-//
-// Garage-door style roof controller:
-//
-// Pulse = Open -> Stop -> Close -> Stop
+// Features:
+// - Optional scope safety input
+// - Optional Hall-effect motion sensor
+// - Runtime enable/disable of both features
+// - OPEN/CLOSED limit switch support
+// - ASCOM-compatible serial protocol
+// - Robust serial command parser with reconnect recovery
 // ======================================================
 
 #include <string.h>
 
-
 // ======================================================
 // PINS
 // ======================================================
+#define PIN_OPENED        11
+#define PIN_CLOSED        12
+#define PIN_SAFE          13
+#define PIN_MOTION         2   // Hall sensor input
 
-#define PIN_OPENED       11
-#define PIN_CLOSED       12
-#define PIN_SAFE         13
+#define RELAY_TRIGGER      7
+#define RELAY_UNUSED       6
+#define RELAY_SENSOR       5
+#define RELAY_SPARE        4
 
-#define RELAY_TRIGGER     7
-#define RELAY_UNUSED      6
-#define RELAY_SENSOR      5
-#define RELAY_SPARE       4
-
-#define LED_PIN          10
-
+#define LED_PIN           10
 
 // ======================================================
 // SENSOR POLARITY
 // ======================================================
-
-#define OPEN_ACTIVE     LOW
-#define CLOSE_ACTIVE    LOW
-#define SAFE_ACTIVE     LOW
-
+#define OPEN_ACTIVE      LOW
+#define CLOSE_ACTIVE     LOW
+#define SAFE_ACTIVE      LOW
+#define MOTION_ACTIVE    LOW
 
 // ======================================================
 // TIMING
 // ======================================================
-
-const unsigned long MOVE_TIMEOUT      = 60000;
-const unsigned long RELAY_PULSE_TIME  = 500;
-
+const unsigned long MOVE_TIMEOUT          = 60000UL;
+const unsigned long RELAY_PULSE_TIME      = 500UL;
+const unsigned long MOTION_CHECK_INTERVAL = 3000UL;
+const unsigned long SERIAL_COMMAND_TIMEOUT = 1000UL; // Recover from partial commands
 
 // ======================================================
 // STATES
 // ======================================================
-
 enum RoofState
 {
   IDLE,
@@ -84,58 +62,50 @@ enum RoofState
 
 RoofState state = IDLE;
 
-
 // ======================================================
 // GLOBALS
 // ======================================================
-
 unsigned long moveStart = 0;
+unsigned long lastMotionTime = 0;
+unsigned long motionPulseCount = 0;
+unsigned long lastSerialByteTime = 0;
 
-char buffer[32];
+bool safeModeEnabled = false;
+bool motionSensorEnabled = false;
+
+char buffer[64];
 byte bufferIndex = 0;
-
 
 // ======================================================
 // FORWARD DECLARATIONS
 // ======================================================
-
 void ReadSerial();
 void ProcessCommand(const char* cmd);
-
 void UpdateStateMachine();
 void UpdateLED();
-
 void StartOpen();
 void StartClose();
-
 void PulseTriggerRelay();
-
 void StopAll();
 void StopAllRelays();
-
 void SendStatus();
-
 void Ack(const char* cmd);
 void Nack(const char* cmd);
 
 bool IsSafe();
 bool IsOpen();
 bool IsClosed();
-
+bool IsMotionDetected();
 
 // ======================================================
 // SENSOR FUNCTIONS
 // ======================================================
-
-// TEMPORARY SAFE BYPASS
-// ENABLE REAL SAFE INPUT LATER
-
 bool IsSafe()
 {
-  return true;
+  if (!safeModeEnabled)
+    return true;
 
-  // ENABLE LATER:
-  // return digitalRead(PIN_SAFE) == SAFE_ACTIVE;
+  return digitalRead(PIN_SAFE) == SAFE_ACTIVE;
 }
 
 bool IsOpen()
@@ -148,146 +118,121 @@ bool IsClosed()
   return digitalRead(PIN_CLOSED) == CLOSE_ACTIVE;
 }
 
+bool IsMotionDetected()
+{
+  if (!motionSensorEnabled)
+    return true;
+
+  return digitalRead(PIN_MOTION) == MOTION_ACTIVE;
+}
 
 // ======================================================
 // SETUP
 // ======================================================
-
 void setup()
 {
-  // --------------------------------------------------
-  // Configure relay outputs FIRST
-  // Prevent relay glitch during Arduino boot
-  // --------------------------------------------------
-
+  // Configure relay outputs
   pinMode(RELAY_TRIGGER, OUTPUT);
   pinMode(RELAY_UNUSED, OUTPUT);
   pinMode(RELAY_SENSOR, OUTPUT);
   pinMode(RELAY_SPARE, OUTPUT);
 
-  // ACTIVE HIGH BOARD:
-  // LOW = OFF
+  StopAllRelays();
 
-  digitalWrite(RELAY_TRIGGER, LOW);
-  digitalWrite(RELAY_UNUSED, LOW);
-  digitalWrite(RELAY_SENSOR, LOW);
-  digitalWrite(RELAY_SPARE, LOW);
-
-  // --------------------------------------------------
-  // Inputs
-  // --------------------------------------------------
-
+  // Configure inputs
   pinMode(PIN_OPENED, INPUT_PULLUP);
   pinMode(PIN_CLOSED, INPUT_PULLUP);
   pinMode(PIN_SAFE, INPUT_PULLUP);
+  pinMode(PIN_MOTION, INPUT_PULLUP);
 
-  // --------------------------------------------------
-  // LED
-  // --------------------------------------------------
-
+  // Configure status LED
   pinMode(LED_PIN, OUTPUT);
-
   digitalWrite(LED_PIN, LOW);
 
-  // --------------------------------------------------
-  // Allow hardware to stabilize
-  // --------------------------------------------------
+  // Allow hardware to settle
+  delay(500);
 
-  delay(1000);
-
-  // --------------------------------------------------
-  // Serial
-  // --------------------------------------------------
-
+  // Start serial
   Serial.begin(9600);
 
-  // --------------------------------------------------
-  // Ensure relays OFF
-  // --------------------------------------------------
+  // Brief pause only
+  delay(100);
 
-  StopAllRelays();
+  // Clear any bytes already in the buffer
+  while (Serial.available() > 0)
+    Serial.read();
 
-  // --------------------------------------------------
-  // Initial state from sensors
-  // --------------------------------------------------
+  // Reset command parser
+  bufferIndex = 0;
+  lastSerialByteTime = 0;
 
+  // Determine initial roof state
   if (IsOpen())
-  {
     state = OPEN;
-  }
   else if (IsClosed())
-  {
     state = CLOSED;
-  }
   else
-  {
     state = IDLE;
-  }
 }
-
-
 // ======================================================
 // MAIN LOOP
 // ======================================================
-
 void loop()
 {
   ReadSerial();
-
   UpdateStateMachine();
-
   UpdateLED();
 }
-
 
 // ======================================================
 // SERIAL INPUT
 // ======================================================
-
 void ReadSerial()
 {
-  while (Serial.available())
+  // If command reception stalls, discard partial command.
+  if (bufferIndex > 0 &&
+      (millis() - lastSerialByteTime > SERIAL_COMMAND_TIMEOUT))
+  {
+    bufferIndex = 0;
+  }
+
+  while (Serial.available() > 0)
   {
     char c = Serial.read();
+    lastSerialByteTime = millis();
 
     if (c == '#')
     {
       buffer[bufferIndex] = '\0';
-
       ProcessCommand(buffer);
-
       bufferIndex = 0;
     }
-    else
+    else if (c >= 32 && c <= 126) // printable ASCII only
     {
       if (bufferIndex < sizeof(buffer) - 1)
       {
         buffer[bufferIndex++] = c;
       }
+      else
+      {
+        // Overflow protection
+        bufferIndex = 0;
+      }
     }
   }
 }
 
-
 // ======================================================
 // COMMAND PROCESSING
 // ======================================================
-
 void ProcessCommand(const char* cmd)
 {
-  // --------------------------------------------------
-  // Ping
-  // --------------------------------------------------
-
   if (strcmp(cmd, "ping") == 0)
   {
     Serial.print("PONG#");
+    Serial.flush();
     return;
   }
-
-  // --------------------------------------------------
-  // Status
-  // --------------------------------------------------
 
   if (strcmp(cmd, "status") == 0)
   {
@@ -295,63 +240,63 @@ void ProcessCommand(const char* cmd)
     return;
   }
 
-  // --------------------------------------------------
-  // Open
-  // --------------------------------------------------
-
   if (strcmp(cmd, "open") == 0)
   {
     StartOpen();
-
     Ack("open");
-
     return;
   }
-
-  // --------------------------------------------------
-  // Close
-  // --------------------------------------------------
 
   if (strcmp(cmd, "close") == 0)
   {
     StartClose();
-
     Ack("close");
-
     return;
   }
-
-  // --------------------------------------------------
-  // Abort
-  // --------------------------------------------------
 
   if (strcmp(cmd, "abort") == 0)
   {
     StopAll();
-
     Ack("abort");
-
     return;
   }
 
-  // --------------------------------------------------
-  // Unknown
-  // --------------------------------------------------
+  if (strcmp(cmd, "setsafe:1") == 0)
+  {
+    safeModeEnabled = true;
+    Ack("setsafe");
+    return;
+  }
+
+  if (strcmp(cmd, "setsafe:0") == 0)
+  {
+    safeModeEnabled = false;
+    Ack("setsafe");
+    return;
+  }
+
+  if (strcmp(cmd, "setmotion:1") == 0)
+  {
+    motionSensorEnabled = true;
+    Ack("setmotion");
+    return;
+  }
+
+  if (strcmp(cmd, "setmotion:0") == 0)
+  {
+    motionSensorEnabled = false;
+    Ack("setmotion");
+    return;
+  }
 
   Nack(cmd);
 }
 
-
 // ======================================================
 // STATE MACHINE
 // ======================================================
-
 void UpdateStateMachine()
 {
-  // --------------------------------------------------
-  // LIVE SENSOR PRIORITY
-  // --------------------------------------------------
-
   if (IsOpen())
   {
     state = OPEN;
@@ -364,46 +309,40 @@ void UpdateStateMachine()
     return;
   }
 
-  // --------------------------------------------------
-  // Between sensors
-  // --------------------------------------------------
-
-  switch (state)
+  if (state == OPENING || state == CLOSING)
   {
-    case OPEN:
-    case CLOSED:
+    unsigned long now = millis();
 
-      state = IDLE;
-      break;
+    if (now - moveStart > MOVE_TIMEOUT)
+    {
+      state = ERROR;
+      return;
+    }
 
-    case OPENING:
-
-      if (millis() - moveStart > MOVE_TIMEOUT)
+    if (motionSensorEnabled)
+    {
+      if (IsMotionDetected())
       {
-        state = ERROR;
+        motionPulseCount++;
+        lastMotionTime = now;
+        delay(10); // debounce
       }
 
-      break;
-
-    case CLOSING:
-
-      if (millis() - moveStart > MOVE_TIMEOUT)
+      if (now - lastMotionTime > MOTION_CHECK_INTERVAL)
       {
         state = ERROR;
+        return;
       }
-
-      break;
-
-    default:
-      break;
+    }
   }
+
+  if (state == OPEN || state == CLOSED)
+    state = IDLE;
 }
 
-
 // ======================================================
-// OPEN COMMAND
+// OPEN / CLOSE
 // ======================================================
-
 void StartOpen()
 {
   if (!IsSafe())
@@ -419,14 +358,8 @@ void StartOpen()
   }
 
   state = OPENING;
-
   PulseTriggerRelay();
 }
-
-
-// ======================================================
-// CLOSE COMMAND
-// ======================================================
 
 void StartClose()
 {
@@ -443,161 +376,94 @@ void StartClose()
   }
 
   state = CLOSING;
-
   PulseTriggerRelay();
 }
-
 
 // ======================================================
 // RELAY PULSE
 // ======================================================
-
 void PulseTriggerRelay()
 {
-  // Ensure OFF first
-
   digitalWrite(RELAY_TRIGGER, LOW);
-
   delay(100);
 
-  // ACTIVE HIGH pulse
-
   digitalWrite(RELAY_TRIGGER, HIGH);
-
   delay(RELAY_PULSE_TIME);
-
-  // OFF again
-
   digitalWrite(RELAY_TRIGGER, LOW);
 
   moveStart = millis();
+  lastMotionTime = moveStart;
+  motionPulseCount = 0;
 }
-
 
 // ======================================================
 // STOP
 // ======================================================
-
 void StopAll()
 {
   StopAllRelays();
 
   if (IsOpen())
-  {
     state = OPEN;
-  }
   else if (IsClosed())
-  {
     state = CLOSED;
-  }
   else
-  {
     state = IDLE;
-  }
 }
-
-
-// ======================================================
-// RELAYS
-// ======================================================
 
 void StopAllRelays()
 {
-  // ACTIVE HIGH:
-  // LOW = OFF
-
   digitalWrite(RELAY_TRIGGER, LOW);
   digitalWrite(RELAY_UNUSED, LOW);
   digitalWrite(RELAY_SENSOR, LOW);
   digitalWrite(RELAY_SPARE, LOW);
 }
 
-
 // ======================================================
-// STATUS REPORTING
+// STATUS
 // ======================================================
-
 void SendStatus()
 {
   Serial.print("STATE:");
 
-  // --------------------------------------------------
-  // Sensors ALWAYS win
-  // --------------------------------------------------
-
   if (IsOpen())
-  {
     Serial.print("OPEN;");
-  }
   else if (IsClosed())
-  {
     Serial.print("CLOSED;");
-  }
   else
   {
     switch (state)
     {
-      case OPENING:
-        Serial.print("OPENING;");
-        break;
-
-      case CLOSING:
-        Serial.print("CLOSING;");
-        break;
-
-      case ERROR:
-        Serial.print("ERROR;");
-        break;
-
-      default:
-        Serial.print("IDLE;");
-        break;
+      case OPENING: Serial.print("OPENING;"); break;
+      case CLOSING: Serial.print("CLOSING;"); break;
+      case ERROR:   Serial.print("ERROR;"); break;
+      default:      Serial.print("IDLE;"); break;
     }
   }
 
-  // --------------------------------------------------
-  // Safety
-  // --------------------------------------------------
+  Serial.print(IsSafe() ? "SAFE;" : "UNSAFE;");
 
-  if (IsSafe())
+  if (motionSensorEnabled)
   {
-    Serial.print("SAFE;");
-  }
-  else
-  {
-    Serial.print("UNSAFE;");
+    Serial.print("PULSES:");
+    Serial.print(motionPulseCount);
+    Serial.print(';');
   }
 
-  // --------------------------------------------------
-  // Motion
-  // --------------------------------------------------
-
-  if (state == OPENING || state == CLOSING)
-  {
-    Serial.print("MOVING#");
-  }
-  else
-  {
-    Serial.print("IDLE#");
-  }
+  Serial.print((state == OPENING || state == CLOSING) ? "MOVING#" : "IDLE#");
+  Serial.flush();
 }
-
 
 // ======================================================
 // LED STATUS
 // ======================================================
-
 void UpdateLED()
 {
-  // MOVING
-
   if (state == OPENING || state == CLOSING)
   {
     digitalWrite(LED_PIN, (millis() / 250) % 2);
     return;
   }
-
-  // ERROR
 
   if (state == ERROR)
   {
@@ -605,31 +471,24 @@ void UpdateLED()
     return;
   }
 
-  // SAFE / IDLE
-
   digitalWrite(LED_PIN, IsSafe() ? HIGH : LOW);
 }
 
-
 // ======================================================
-// ACK
+// ACK / NACK
 // ======================================================
-
 void Ack(const char* cmd)
 {
   Serial.print("OK:");
   Serial.print(cmd);
-  Serial.print("#");
+  Serial.print('#');
+  Serial.flush();
 }
-
-
-// ======================================================
-// NACK
-// ======================================================
 
 void Nack(const char* cmd)
 {
   Serial.print("ERR:");
   Serial.print(cmd);
-  Serial.print("#");
+  Serial.print('#');
+  Serial.flush();
 }
