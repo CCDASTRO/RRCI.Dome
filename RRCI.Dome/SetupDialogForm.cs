@@ -12,7 +12,6 @@ public partial class SetupDialogForm : Form
     private ComboBox comboPorts;
     private ComboBox comboBaud;
     private CheckBox chkSafeMode;
-    private CheckBox chkRainSensor;
     private CheckBox chkAutoClose;
     private CheckBox chkTraceLogging;
     private TextBox txtDeviceId;
@@ -32,7 +31,6 @@ public partial class SetupDialogForm : Form
             this.comboPorts = new System.Windows.Forms.ComboBox();
             this.comboBaud = new System.Windows.Forms.ComboBox();
             this.chkSafeMode = new System.Windows.Forms.CheckBox();
-            this.chkRainSensor = new System.Windows.Forms.CheckBox();
             this.chkAutoClose = new System.Windows.Forms.CheckBox();
             this.chkTraceLogging = new System.Windows.Forms.CheckBox();
             this.txtDeviceId = new System.Windows.Forms.TextBox();
@@ -42,7 +40,7 @@ public partial class SetupDialogForm : Form
             // 
             // btnOK
             // 
-            this.btnOK.Location = new System.Drawing.Point(98, 120);
+            this.btnOK.Location = new System.Drawing.Point(39, 118);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
             this.btnOK.TabIndex = 7;
@@ -52,7 +50,7 @@ public partial class SetupDialogForm : Form
             // 
             // btnCancel
             // 
-            this.btnCancel.Location = new System.Drawing.Point(179, 120);
+            this.btnCancel.Location = new System.Drawing.Point(147, 118);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 8;
@@ -86,20 +84,10 @@ public partial class SetupDialogForm : Form
             this.chkSafeMode.Text = "Scope Safe";
             this.chkSafeMode.UseVisualStyleBackColor = true;
             // 
-            // chkRainSensor
-            // 
-            this.chkRainSensor.AutoSize = true;
-            this.chkRainSensor.Location = new System.Drawing.Point(12, 70);
-            this.chkRainSensor.Name = "chkRainSensor";
-            this.chkRainSensor.Size = new System.Drawing.Size(84, 17);
-            this.chkRainSensor.TabIndex = 3;
-            this.chkRainSensor.Text = "Rain Sensor";
-            this.chkRainSensor.UseVisualStyleBackColor = true;
-            // 
             // chkAutoClose
             // 
             this.chkAutoClose.AutoSize = true;
-            this.chkAutoClose.Location = new System.Drawing.Point(12, 95);
+            this.chkAutoClose.Location = new System.Drawing.Point(12, 68);
             this.chkAutoClose.Name = "chkAutoClose";
             this.chkAutoClose.Size = new System.Drawing.Size(77, 17);
             this.chkAutoClose.TabIndex = 4;
@@ -118,10 +106,12 @@ public partial class SetupDialogForm : Form
             // 
             // txtDeviceId
             // 
-            this.txtDeviceId.Location = new System.Drawing.Point(113, 92);
+            this.txtDeviceId.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.txtDeviceId.Location = new System.Drawing.Point(12, 92);
             this.txtDeviceId.Name = "txtDeviceId";
-            this.txtDeviceId.Size = new System.Drawing.Size(141, 20);
+            this.txtDeviceId.Size = new System.Drawing.Size(242, 20);
             this.txtDeviceId.TabIndex = 6;
+            this.txtDeviceId.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.txtDeviceId.TextChanged += new System.EventHandler(this.txtDeviceId_TextChanged);
             // 
             // label1
@@ -151,7 +141,6 @@ public partial class SetupDialogForm : Form
             this.Controls.Add(this.comboPorts);
             this.Controls.Add(this.comboBaud);
             this.Controls.Add(this.chkSafeMode);
-            this.Controls.Add(this.chkRainSensor);
             this.Controls.Add(this.chkAutoClose);
             this.Controls.Add(this.chkTraceLogging);
             this.Controls.Add(this.txtDeviceId);
@@ -206,7 +195,6 @@ public partial class SetupDialogForm : Form
             txtDeviceId.Text = profile.GetValue(driverId, "DeviceId", "", driverId);
 
             chkSafeMode.Checked = ReadBool(profile, "SafeMode");
-            chkRainSensor.Checked = ReadBool(profile, "RainSensor");
             chkAutoClose.Checked = ReadBool(profile, "AutoClose");
 
             // New motion sensor option
@@ -234,9 +222,6 @@ public partial class SetupDialogForm : Form
 
             profile.WriteValue(driverId, "SafeMode",
                 chkSafeMode.Checked ? "True" : "False");
-
-            profile.WriteValue(driverId, "RainSensor",
-                chkRainSensor.Checked ? "True" : "False");
 
             profile.WriteValue(driverId, "AutoClose",
                 chkAutoClose.Checked ? "True" : "False");
@@ -280,6 +265,11 @@ public partial class SetupDialogForm : Form
     }
 
     private void txtDeviceId_TextChanged(object sender, EventArgs e)
+    {
+
+    }
+
+    private void chkRainSensor_CheckedChanged(object sender, EventArgs e)
     {
 
     }
