@@ -19,29 +19,28 @@ namespace RRCI.DomeDriver
         private const int MotionTimeoutSeconds = 120;
         private const int SensorGraceDelaySeconds = 2;
 
-        private readonly TraceLogger tl;
+        private TraceLogger tl;
+        private System.Threading.Timer heartbeatTimer;
         private readonly ArrayList supportedActions = new ArrayList();
-
         private Serial serial;
 
         private bool connected;
         private bool moving;
-
         private bool openingCommandActive;
         private bool closingCommandActive;
-
         private DateTime motionStartTime;
 
-        private ShutterState lastKnownShutterState =
-            ShutterState.shutterError;
+private int lastPulseCount = 0;
+
+private DateTime lastPulseCheckTime =
+    DateTime.MinValue;
+
+        private ShutterState lastKnownShutterState = ShutterState.shutterError;
 
         public Dome()
         {
             tl = new TraceLogger("", DriverId);
-
-            // Match SetupDialogForm.cs which stores this as "TraceLogger"
-            tl.Enabled = GetBoolSetting("TraceLogger", false);
-
+            tl.Enabled = TraceEnabled;
             tl.LogMessage("Constructor", "Driver starting");
         }
 
@@ -83,9 +82,7 @@ namespace RRCI.DomeDriver
 
         private bool GetBoolSetting(string key, bool defaultValue)
         {
-            string value = GetSetting(
-                key,
-                defaultValue ? "True" : "False");
+            string value = GetSetting(key, defaultValue ? "True" : "False");
 
             return value.Equals("True", StringComparison.OrdinalIgnoreCase) ||
                    value.Equals("1", StringComparison.OrdinalIgnoreCase);
@@ -108,10 +105,15 @@ namespace RRCI.DomeDriver
         }
 
         private bool SafeModeEnabled =>
-            GetBoolSetting("SafeMode", false);
+     GetBoolSetting("SafeMode", false);
 
         private bool MotionSensorEnabled =>
             GetBoolSetting("MotionSensor", false);
+
+        
+
+        private bool TraceEnabled =>
+            GetBoolSetting("TraceLogger", false);
 
         #endregion
 
@@ -122,8 +124,7 @@ namespace RRCI.DomeDriver
             get => connected;
             set
             {
-                if (value == connected)
-                    return;
+                if (value == connected) return;
 
                 if (value)
                     Connect();
@@ -138,7 +139,15 @@ namespace RRCI.DomeDriver
 
             try
             {
+                CleanupSerial();
+
                 serial = new Serial();
+
+                // IMPORTANT: ASCOM.Utilities.Serial can leave the port in an unstable
+                // state if DTR/RTS are changed. Use the default settings and rely on
+                // the cleanup code below.
+                serial.Handshake = SerialHandshake.None;
+                serial.ReceiveTimeout = 5;
 
                 string port = GetSetting("COM", "");
                 string baud = GetSetting("Baud", "9600");
@@ -148,44 +157,68 @@ namespace RRCI.DomeDriver
 
                 serial.PortName = port;
                 serial.Speed = GetSerialSpeed(baud);
-
                 serial.Connected = true;
 
-                // Allow Arduino to reset after serial connection.
-                Thread.Sleep(2500);
+                Thread.Sleep(3000); // Allow Arduino reset and USB serial re-enumeration
 
-                try
-                {
-                    serial.ClearBuffers();
-                }
-                catch
-                {
-                }
+                try { serial.ClearBuffers(); }
+                catch { }
 
                 connected = true;
+                
+                // -----------------------------------------
+                // Initialize telemetry
+                // -----------------------------------------
 
-                // Verify communications.
+                RoofTelemetry.CurrentPulseCount = 0;
+
+                RoofTelemetry.PercentOpen = 0;
+                if (int.TryParse(
+    GetSetting(
+        "OpenPulseCount",
+        "5000"),
+    out int openPulses))
+                {
+                    RoofTelemetry.OpenPulseCount =
+                        openPulses;
+                }
+                else
+                {
+                    RoofTelemetry.OpenPulseCount = 5000;
+                }
+                RoofTelemetry.Moving = false;
+
+                RoofTelemetry.Faulted = false;
+
+                RoofTelemetry.FaultMessage = "";
+
+                RoofTelemetry.ShutterState =
+                    "Connected";
+
+                RoofTelemetry.LastPulseTime =
+                    DateTime.Now;
+
+                // -----------------------------------------
+
                 string pong = Query("ping", 5000);
-                if (!pong.Contains("PONG"))
+                
+                if (!pong.ToUpperInvariant().Contains("PONG"))
                     throw new DriverException("No PONG response from controller");
 
-                // Send runtime configuration to the Arduino firmware.
                 Query(SafeModeEnabled ? "setsafe:1" : "setsafe:0");
                 Query(MotionSensorEnabled ? "setmotion:1" : "setmotion:0");
 
-                tl.LogMessage(
-                    "Connect",
-                    $"SafeMode={SafeModeEnabled}, MotionSensor={MotionSensorEnabled}");
+                StartHeartbeat();
 
+                tl.LogMessage("Connect", $"SafeMode={SafeModeEnabled}, MotionSensor={MotionSensorEnabled}");
                 tl.LogMessage("Connect", "Connected");
             }
             catch (Exception ex)
             {
                 tl.LogMessage("Connect", ex.ToString());
-
                 connected = false;
+                StopHeartbeat();
                 CleanupSerial();
-
                 throw;
             }
         }
@@ -196,42 +229,118 @@ namespace RRCI.DomeDriver
 
             connected = false;
             moving = false;
-
             openingCommandActive = false;
             closingCommandActive = false;
+            RoofTelemetry.Moving = false;
 
+            RoofTelemetry.ShutterState =
+                "Disconnected";
+            StopHeartbeat();
             CleanupSerial();
+
+            // Wait for Windows and the USB serial driver to fully release the port.
+            Thread.Sleep(3000);
 
             tl.LogMessage("Disconnect", "Disconnected");
         }
 
         private void CleanupSerial()
         {
+            Serial localSerial = serial;
+            serial = null;
+
+            if (localSerial == null)
+                return;
+
+            tl?.LogMessage("CleanupSerial", "Closing COM port");
+
             try
             {
-                if (serial != null)
-                {
-                    try
-                    {
-                        serial.Connected = false;
-                    }
-                    catch
-                    {
-                    }
-
-                    serial.Dispose();
-                    serial = null;
-                }
+                if (localSerial.Connected)
+                    localSerial.Connected = false;
             }
-            catch
+            catch (Exception ex)
             {
+                tl?.LogMessage("CleanupSerial", "Close exception: " + ex.Message);
             }
+
+            try
+            {
+                localSerial.Dispose();
+            }
+            catch (Exception ex)
+            {
+                tl?.LogMessage("CleanupSerial", "Dispose exception: " + ex.Message);
+            }
+
+            // Release any remaining COM references.
+            localSerial = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            Thread.Sleep(3000);
+
+            tl?.LogMessage("CleanupSerial", "COM port released");
         }
 
         private void EnsureConnected()
         {
             if (!connected)
                 throw new NotConnectedException("Dome not connected");
+        }
+
+        #endregion
+
+        #region Heartbeat
+
+        private void StartHeartbeat()
+        {
+            StopHeartbeat();
+
+            heartbeatTimer = new System.Threading.Timer(
+                HeartbeatCallback,
+                null,
+                30000,
+                30000);
+
+            tl?.LogMessage("Heartbeat", "Started");
+        }
+
+        private void HeartbeatCallback(object state)
+        {
+            try
+            {
+                if (connected && serial != null)
+                    Query("ping", 2000);
+            }
+            catch (Exception ex)
+            {
+                tl?.LogMessage("Heartbeat", ex.Message);
+            }
+        }
+
+        private void StopHeartbeat()
+        {
+            if (heartbeatTimer == null)
+                return;
+
+            try
+            {
+                using (ManualResetEvent waitHandle = new ManualResetEvent(false))
+                {
+                    heartbeatTimer.Dispose(waitHandle);
+                    waitHandle.WaitOne(5000);
+                }
+            }
+            catch (Exception ex)
+            {
+                tl?.LogMessage("Heartbeat", "Stop exception: " + ex.Message);
+            }
+
+            heartbeatTimer = null;
+            tl?.LogMessage("Heartbeat", "Stopped");
         }
 
         #endregion
@@ -244,51 +353,217 @@ namespace RRCI.DomeDriver
 
             lock (this)
             {
-                try
+                tl.LogMessage("TX", command);
+                serial.Transmit(command + "#");
+
+                DateTime timeout = DateTime.Now.AddMilliseconds(timeoutMs);
+
+                while (DateTime.Now < timeout)
                 {
-                    tl.LogMessage("TX", command);
-
-                    serial.Transmit(command + "#");
-
-                    DateTime timeout =
-                        DateTime.Now.AddMilliseconds(timeoutMs);
-
-                    while (DateTime.Now < timeout)
+                    try
                     {
+                        string response = serial.ReceiveTerminated("#");
+                        if (!string.IsNullOrWhiteSpace(response))
+                        {
+                            response = response.Trim();
+                            tl.LogMessage("RX", response);
+                            return response;
+                        }
+                    }
+                    catch
+                    {
+                        Thread.Sleep(20);
+                    }
+                }
+
+                throw new DriverException("Timeout waiting for response to: " + command);
+            }
+        }
+        private void UpdatePulseTelemetry()
+        {
+            try
+            {
+                // -------------------------------------
+                // Hall sensor disabled
+                // -------------------------------------
+
+                if (!MotionSensorEnabled)
+                    return;
+
+                // -------------------------------------
+                // Request pulse count
+                // -------------------------------------
+
+                string response =
+                    Query("getpulsecount", 2000);
+
+                if (!response.StartsWith(
+                    "PULSES:",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                // -------------------------------------
+                // Parse pulse count
+                // -------------------------------------
+
+                string value =
+                    response.Replace("PULSES:", "")
+                    .Trim();
+
+                if (!int.TryParse(value, out int count))
+                    return;
+
+                // -------------------------------------
+                // Update telemetry
+                // -------------------------------------
+
+                RoofTelemetry.CurrentPulseCount =
+                    count;
+
+                // -------------------------------------
+                // Calculate roof percentage
+                // -------------------------------------
+
+                if (RoofTelemetry.OpenPulseCount > 0)
+                {
+                    int percent =
+                        (int)(
+                            (double)count /
+                            RoofTelemetry.OpenPulseCount
+                            * 100.0
+                        );
+
+                    percent = Math.Max(
+                        0,
+                        Math.Min(100, percent));
+
+                    RoofTelemetry.PercentOpen =
+                        percent;
+                }
+
+                // -------------------------------------
+                // Detect pulse activity
+                // -------------------------------------
+
+                if (count != lastPulseCount)
+                {
+                    RoofTelemetry.LastPulseTime =
+                        DateTime.Now;
+
+                    lastPulseCount = count;
+
+                    lastPulseCheckTime =
+                        DateTime.Now;
+                }
+
+                // -------------------------------------
+                // Hall timeout protection
+                // -------------------------------------
+
+                if (moving &&
+                    MotionSensorEnabled &&
+                    (DateTime.Now - motionStartTime)
+                    .TotalSeconds > 3)
+                {
+                    double pulseElapsed =
+                        (
+                            DateTime.Now -
+                            RoofTelemetry.LastPulseTime
+                        ).TotalSeconds;
+
+                    if (pulseElapsed > 3)
+                    {
+                        tl.LogMessage(
+                            "PulseMonitor",
+                            "Hall pulse timeout");
+
+                        moving = false;
+
+                        openingCommandActive = false;
+                        closingCommandActive = false;
+
                         try
                         {
-                            string response =
-                                serial.ReceiveTerminated("#");
-
-                            if (!string.IsNullOrWhiteSpace(response))
-                            {
-                                response =
-                                    response.Trim().ToUpperInvariant();
-
-                                tl.LogMessage("RX", response);
-
-                                return response;
-                            }
+                            Query("abort", 3000);
                         }
                         catch
                         {
-                            Thread.Sleep(20);
                         }
-                    }
 
-                    throw new DriverException("Timeout waiting for response");
+                        RoofTelemetry.Moving = false;
+
+                        RoofTelemetry.Faulted = true;
+
+                        RoofTelemetry.FaultMessage =
+                            "Hall pulse timeout";
+
+                        RoofTelemetry.ShutterState =
+                            "Error";
+
+                        lastKnownShutterState =
+                            ShutterState.shutterError;
+                    }
                 }
-                catch (Exception ex)
+
+                // -------------------------------------
+                // Overshoot protection
+                // -------------------------------------
+
+                if (RoofTelemetry.OpenPulseCount > 0)
                 {
-                    tl.LogMessage("Query", ex.Message);
-                    throw;
+                    int maxAllowed =
+                        (int)(
+                            RoofTelemetry.OpenPulseCount
+                            * 1.05
+                        );
+
+                    if (RoofTelemetry.CurrentPulseCount >
+                        maxAllowed)
+                    {
+                        tl.LogMessage(
+                            "PulseMonitor",
+                            "Pulse overshoot detected");
+
+                        moving = false;
+
+                        openingCommandActive = false;
+                        closingCommandActive = false;
+
+                        try
+                        {
+                            Query("abort", 3000);
+                        }
+                        catch
+                        {
+                        }
+
+                        RoofTelemetry.Moving = false;
+
+                        RoofTelemetry.Faulted = true;
+
+                        RoofTelemetry.FaultMessage =
+                            "Pulse overshoot detected";
+
+                        RoofTelemetry.ShutterState =
+                            "Error";
+
+                        lastKnownShutterState =
+                            ShutterState.shutterError;
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                tl.LogMessage(
+                    "UpdatePulseTelemetry",
+                    ex.Message);
+            }
         }
-
         #endregion
 
-        #region Shutter Status
+        #region Shutter Control
 
         public ShutterState ShutterStatus
         {
@@ -298,31 +573,67 @@ namespace RRCI.DomeDriver
 
                 try
                 {
-                    string status = Query("status");
+                    string status = Query("status").ToUpperInvariant();
 
-                    // Firmware explicitly reports an error state.
+                    // -------------------------------------------------
+                    // Controller-reported error
+                    // -------------------------------------------------
+
                     if (status.Contains("ERROR"))
                     {
                         moving = false;
                         openingCommandActive = false;
                         closingCommandActive = false;
 
-                        lastKnownShutterState =
-                            ShutterState.shutterError;
+                        RoofTelemetry.Moving = false;
+                        RoofTelemetry.Faulted = true;
+                        RoofTelemetry.FaultMessage =
+                            "Controller reported error";
 
-                        return lastKnownShutterState;
+                        RoofTelemetry.ShutterState = "Error";
+
+                        return lastKnownShutterState =
+                            ShutterState.shutterError;
                     }
 
-                    bool openSensorActive = status.Contains("OPEN");
-                    bool closedSensorActive = status.Contains("CLOSED");
+                    // -------------------------------------------------
+                    // Sensor states
+                    // -------------------------------------------------
 
-                    // Moving state takes priority.
+                    bool openSensorActive =
+                        status.Contains("STATE:OPEN") ||
+                        status.Contains("OPEN;");
+
+                    bool closedSensorActive =
+                        status.Contains("STATE:CLOSED") ||
+                        status.Contains("CLOSED;");
+
+                    RoofTelemetry.OpenLimitActive =
+                        openSensorActive;
+
+                    RoofTelemetry.ClosedLimitActive =
+                        closedSensorActive;
+
+                    // -------------------------------------------------
+                    // Motion handling
+                    // -------------------------------------------------
+
                     if (moving)
                     {
-                        double elapsed =
-                            (DateTime.Now - motionStartTime).TotalSeconds;
+                        // -------------------------------------
+                        // Update hall pulse telemetry
+                        // -------------------------------------
 
-                        // Driver-side timeout protection.
+                        UpdatePulseTelemetry();
+
+                        double elapsed =
+                            (DateTime.Now - motionStartTime)
+                            .TotalSeconds;
+
+                        // ---------------------------------------------
+                        // Hard failsafe timeout
+                        // ---------------------------------------------
+
                         if (elapsed > MotionTimeoutSeconds)
                         {
                             tl.LogMessage(
@@ -333,116 +644,156 @@ namespace RRCI.DomeDriver
                             openingCommandActive = false;
                             closingCommandActive = false;
 
-                            lastKnownShutterState =
-                                ShutterState.shutterError;
+                            RoofTelemetry.Moving = false;
 
-                            return lastKnownShutterState;
+                            RoofTelemetry.Faulted = true;
+
+                            RoofTelemetry.FaultMessage =
+                                "Hard movement timeout";
+
+                            RoofTelemetry.ShutterState =
+                                "Error";
+
+                            return lastKnownShutterState =
+                                ShutterState.shutterError;
                         }
 
-                        // Ignore sensors briefly after issuing command.
+                        // ---------------------------------------------
+                        // Initial grace delay
+                        // ---------------------------------------------
+
                         if (elapsed < SensorGraceDelaySeconds)
                         {
                             if (openingCommandActive)
-                                return ShutterState.shutterOpening;
+                            {
+                                RoofTelemetry.ShutterState =
+                                    "Opening";
+
+                                return ShutterState
+                                    .shutterOpening;
+                            }
 
                             if (closingCommandActive)
-                                return ShutterState.shutterClosing;
+                            {
+                                RoofTelemetry.ShutterState =
+                                    "Closing";
+
+                                return ShutterState
+                                    .shutterClosing;
+                            }
                         }
+
+                        // ---------------------------------------------
+                        // Opening logic
+                        // ---------------------------------------------
 
                         if (openingCommandActive)
                         {
+                            RoofTelemetry.ShutterState =
+                                "Opening";
+
                             if (openSensorActive)
                             {
-                                tl.LogMessage(
-                                    "ShutterStatus",
-                                    "OPEN sensor confirmed");
-
                                 moving = false;
                                 openingCommandActive = false;
-                                closingCommandActive = false;
 
-                                lastKnownShutterState =
+                                RoofTelemetry.Moving = false;
+
+                                RoofTelemetry.ShutterState =
+                                    "Open";
+
+                                RoofTelemetry.Faulted = false;
+                                RoofTelemetry.FaultMessage = "";
+
+                                return lastKnownShutterState =
                                     ShutterState.shutterOpen;
-
-                                return lastKnownShutterState;
                             }
 
-                            return ShutterState.shutterOpening;
+                            return ShutterState
+                                .shutterOpening;
                         }
+
+                        // ---------------------------------------------
+                        // Closing logic
+                        // ---------------------------------------------
 
                         if (closingCommandActive)
                         {
+                            RoofTelemetry.ShutterState =
+                                "Closing";
+
                             if (closedSensorActive)
                             {
-                                tl.LogMessage(
-                                    "ShutterStatus",
-                                    "CLOSED sensor confirmed");
-
                                 moving = false;
-                                openingCommandActive = false;
                                 closingCommandActive = false;
 
-                                lastKnownShutterState =
-                                    ShutterState.shutterClosed;
+                                RoofTelemetry.Moving = false;
 
-                                return lastKnownShutterState;
+                                RoofTelemetry.ShutterState =
+                                    "Closed";
+
+                                RoofTelemetry.Faulted = false;
+                                RoofTelemetry.FaultMessage = "";
+
+                                return lastKnownShutterState =
+                                    ShutterState.shutterClosed;
                             }
 
-                            return ShutterState.shutterClosing;
+                            return ShutterState
+                                .shutterClosing;
                         }
                     }
 
-                    // Idle sensor reporting.
+                    // -------------------------------------------------
+                    // Non-moving sensor states
+                    // -------------------------------------------------
+
                     if (openSensorActive)
                     {
-                        moving = false;
-                        openingCommandActive = false;
-                        closingCommandActive = false;
+                        RoofTelemetry.ShutterState = "Open";
 
-                        lastKnownShutterState =
+                        RoofTelemetry.Faulted = false;
+                        RoofTelemetry.FaultMessage = "";
+
+                        return lastKnownShutterState =
                             ShutterState.shutterOpen;
-
-                        return lastKnownShutterState;
                     }
 
                     if (closedSensorActive)
                     {
-                        moving = false;
-                        openingCommandActive = false;
-                        closingCommandActive = false;
+                        RoofTelemetry.ShutterState = "Closed";
 
-                        lastKnownShutterState =
+                        RoofTelemetry.Faulted = false;
+                        RoofTelemetry.FaultMessage = "";
+
+                        return lastKnownShutterState =
                             ShutterState.shutterClosed;
-
-                        return lastKnownShutterState;
                     }
 
-                    // Neither sensor active while idle.
-                    tl.LogMessage(
-                        "ShutterStatus",
-                        "No sensors active - reporting ERROR");
+                    // -------------------------------------------------
+                    // Unknown state
+                    // -------------------------------------------------
 
-                    moving = false;
-                    openingCommandActive = false;
-                    closingCommandActive = false;
+                    RoofTelemetry.ShutterState = "Error";
 
-                    lastKnownShutterState =
+                    return lastKnownShutterState =
                         ShutterState.shutterError;
-
-                    return lastKnownShutterState;
                 }
                 catch (Exception ex)
                 {
                     tl.LogMessage("ShutterStatus", ex.Message);
 
-                    moving = false;
-                    openingCommandActive = false;
-                    closingCommandActive = false;
+                    RoofTelemetry.Moving = false;
 
-                    lastKnownShutterState =
+                    RoofTelemetry.Faulted = true;
+
+                    RoofTelemetry.FaultMessage =
+                        ex.Message;
+
+                    RoofTelemetry.ShutterState = "Error";
+
+                    return lastKnownShutterState =
                         ShutterState.shutterError;
-
-                    return lastKnownShutterState;
                 }
             }
         }
@@ -451,14 +802,17 @@ namespace RRCI.DomeDriver
         {
             EnsureConnected();
 
-            tl.LogMessage("OpenShutter", "Opening roof");
-
             string response = Query("open", 10000);
 
-            if (!response.StartsWith("OK"))
+            if (!response.StartsWith(
+                "OK",
+                StringComparison.OrdinalIgnoreCase))
+            {
                 throw new DriverException(response);
+            }
 
             moving = true;
+
             openingCommandActive = true;
             closingCommandActive = false;
 
@@ -466,20 +820,42 @@ namespace RRCI.DomeDriver
 
             lastKnownShutterState =
                 ShutterState.shutterOpening;
+
+            // -----------------------------------------
+            // Telemetry updates
+            // -----------------------------------------
+
+            RoofTelemetry.Moving = true;
+
+            RoofTelemetry.MovementStartTime =
+                motionStartTime;
+
+            RoofTelemetry.ShutterState =
+                "Opening";
+
+            RoofTelemetry.Faulted = false;
+
+            RoofTelemetry.FaultMessage = "";
+
+            RoofTelemetry.LastPulseTime =
+                DateTime.Now;
         }
 
         public void CloseShutter()
         {
             EnsureConnected();
 
-            tl.LogMessage("CloseShutter", "Closing roof");
-
             string response = Query("close", 10000);
 
-            if (!response.StartsWith("OK"))
+            if (!response.StartsWith(
+                "OK",
+                StringComparison.OrdinalIgnoreCase))
+            {
                 throw new DriverException(response);
+            }
 
             moving = true;
+
             openingCommandActive = false;
             closingCommandActive = true;
 
@@ -487,12 +863,29 @@ namespace RRCI.DomeDriver
 
             lastKnownShutterState =
                 ShutterState.shutterClosing;
+
+            // -----------------------------------------
+            // Telemetry updates
+            // -----------------------------------------
+
+            RoofTelemetry.Moving = true;
+
+            RoofTelemetry.MovementStartTime =
+                motionStartTime;
+
+            RoofTelemetry.ShutterState =
+                "Closing";
+
+            RoofTelemetry.Faulted = false;
+
+            RoofTelemetry.FaultMessage = "";
+
+            RoofTelemetry.LastPulseTime =
+                DateTime.Now;
         }
 
         public void AbortSlew()
         {
-            tl.LogMessage("AbortSlew", "Abort requested");
-
             try
             {
                 Query("abort", 3000);
@@ -502,8 +895,14 @@ namespace RRCI.DomeDriver
             }
 
             moving = false;
+
             openingCommandActive = false;
             closingCommandActive = false;
+
+            RoofTelemetry.Moving = false;
+
+            RoofTelemetry.ShutterState =
+                "Aborted";
 
             lastKnownShutterState =
                 ShutterState.shutterError;
@@ -513,33 +912,23 @@ namespace RRCI.DomeDriver
 
         #endregion
 
-        #region Commands
+        #region Command Methods
 
-        public void CommandBlind(string command, bool raw)
-        {
-            Query(command);
-        }
+        public void CommandBlind(string command, bool raw) => Query(command);
 
         public bool CommandBool(string command, bool raw)
         {
             string response = Query(command);
-            return response.StartsWith("OK");
+            return response.StartsWith("OK", StringComparison.OrdinalIgnoreCase);
         }
 
-        public string CommandString(string command, bool raw)
-        {
-            return Query(command);
-        }
+        public string CommandString(string command, bool raw) => Query(command);
 
         #endregion
 
         #region ASCOM Required Members
 
-        public string Action(string actionName, string actionParameters)
-        {
-            return string.Empty;
-        }
-
+        public string Action(string actionName, string actionParameters) => string.Empty;
         public ArrayList SupportedActions => supportedActions;
 
         public void SetupDialog()
@@ -550,23 +939,14 @@ namespace RRCI.DomeDriver
             }
         }
 
-        public string DriverInfo =>
-            "Driver for Arduino Roof Controller";
-
-        public string DriverVersion =>
-            "1.3.0";
-
+        public string DriverInfo => "Driver for Arduino Roof Controller";
+        public string DriverVersion => "1.3.1";
         public short InterfaceVersion => 2;
-
-        public string Name =>
-            "Rolling Roof Controller Interface";
-
-        public string Description =>
-            "ASCOM Roof Controller";
+        public string Name => "Rolling Roof Controller Interface";
+        public string Description => "ASCOM Roof Controller";
 
         public bool AtHome => false;
         public bool AtPark => false;
-
         public bool CanFindHome => false;
         public bool CanPark => false;
         public bool CanSetPark => false;
@@ -586,29 +966,15 @@ namespace RRCI.DomeDriver
             }
         }
 
-        public double Altitude =>
-            throw new PropertyNotImplementedException();
+        public double Altitude => throw new PropertyNotImplementedException();
+        public double Azimuth => throw new PropertyNotImplementedException();
 
-        public double Azimuth =>
-            throw new PropertyNotImplementedException();
-
-        public void FindHome() =>
-            throw new MethodNotImplementedException();
-
-        public void Park() =>
-            throw new MethodNotImplementedException();
-
-        public void SetPark() =>
-            throw new MethodNotImplementedException();
-
-        public void SlewToAltitude(double altitude) =>
-            throw new MethodNotImplementedException();
-
-        public void SlewToAzimuth(double azimuth) =>
-            throw new MethodNotImplementedException();
-
-        public void SyncToAzimuth(double azimuth) =>
-            throw new MethodNotImplementedException();
+        public void FindHome() => throw new MethodNotImplementedException();
+        public void Park() => throw new MethodNotImplementedException();
+        public void SetPark() => throw new MethodNotImplementedException();
+        public void SlewToAltitude(double altitude) => throw new MethodNotImplementedException();
+        public void SlewToAzimuth(double azimuth) => throw new MethodNotImplementedException();
+        public void SyncToAzimuth(double azimuth) => throw new MethodNotImplementedException();
 
         #endregion
 
@@ -616,12 +982,20 @@ namespace RRCI.DomeDriver
 
         public void Dispose()
         {
-            tl.LogMessage("Dispose", "Driver shutting down");
+            try
+            {
+                tl?.LogMessage("Dispose", "Driver shutting down");
+                StopHeartbeat();
+                Disconnect();
 
-            Disconnect();
-
-            tl.Enabled = false;
-            tl.Dispose();
+                if (tl != null)
+                {
+                    tl.Enabled = false;
+                    tl.Dispose();
+                    tl = null;
+                }
+            }
+            catch { }
         }
 
         #endregion

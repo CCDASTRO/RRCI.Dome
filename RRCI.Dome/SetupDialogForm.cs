@@ -17,6 +17,8 @@ public partial class SetupDialogForm : Form
     private TextBox txtDeviceId;
     private Label label1;
     private CheckBox chkMotionSensor;
+    private Label lblOpenPulseCount;
+    private TextBox txtOpenPulseCount;
     private bool _isLoading = false;
 
     public SetupDialogForm()
@@ -36,11 +38,13 @@ public partial class SetupDialogForm : Form
             this.txtDeviceId = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
             this.chkMotionSensor = new System.Windows.Forms.CheckBox();
+            this.lblOpenPulseCount = new System.Windows.Forms.Label();
+            this.txtOpenPulseCount = new System.Windows.Forms.TextBox();
             this.SuspendLayout();
             // 
             // btnOK
             // 
-            this.btnOK.Location = new System.Drawing.Point(39, 118);
+            this.btnOK.Location = new System.Drawing.Point(40, 157);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
             this.btnOK.TabIndex = 7;
@@ -50,7 +54,7 @@ public partial class SetupDialogForm : Form
             // 
             // btnCancel
             // 
-            this.btnCancel.Location = new System.Drawing.Point(147, 118);
+            this.btnCancel.Location = new System.Drawing.Point(148, 157);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 8;
@@ -107,7 +111,7 @@ public partial class SetupDialogForm : Form
             // txtDeviceId
             // 
             this.txtDeviceId.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.txtDeviceId.Location = new System.Drawing.Point(12, 92);
+            this.txtDeviceId.Location = new System.Drawing.Point(13, 131);
             this.txtDeviceId.Name = "txtDeviceId";
             this.txtDeviceId.Size = new System.Drawing.Size(242, 20);
             this.txtDeviceId.TabIndex = 6;
@@ -133,9 +137,27 @@ public partial class SetupDialogForm : Form
             this.chkMotionSensor.Text = "Roof Motion Sensor";
             this.chkMotionSensor.UseVisualStyleBackColor = true;
             // 
+            // lblOpenPulseCount
+            // 
+            this.lblOpenPulseCount.AutoSize = true;
+            this.lblOpenPulseCount.Location = new System.Drawing.Point(12, 101);
+            this.lblOpenPulseCount.Name = "lblOpenPulseCount";
+            this.lblOpenPulseCount.Size = new System.Drawing.Size(35, 13);
+            this.lblOpenPulseCount.TabIndex = 11;
+            this.lblOpenPulseCount.Text = "label2";
+            // 
+            // txtOpenPulseCount
+            // 
+            this.txtOpenPulseCount.Location = new System.Drawing.Point(137, 101);
+            this.txtOpenPulseCount.Name = "txtOpenPulseCount";
+            this.txtOpenPulseCount.Size = new System.Drawing.Size(100, 20);
+            this.txtOpenPulseCount.TabIndex = 12;
+            // 
             // SetupDialogForm
             // 
-            this.ClientSize = new System.Drawing.Size(266, 147);
+            this.ClientSize = new System.Drawing.Size(266, 192);
+            this.Controls.Add(this.txtOpenPulseCount);
+            this.Controls.Add(this.lblOpenPulseCount);
             this.Controls.Add(this.chkMotionSensor);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.comboPorts);
@@ -199,6 +221,7 @@ public partial class SetupDialogForm : Form
 
             // New motion sensor option
             chkMotionSensor.Checked = ReadBool(profile, "MotionSensor");
+            txtOpenPulseCount.Text = profile.GetValue(driverId,"OpenPulseCount","","5000");
 
             // Existing trace logging checkbox
             chkTraceLogging.Checked = profile.GetValue(
@@ -222,7 +245,7 @@ public partial class SetupDialogForm : Form
 
             profile.WriteValue(driverId, "SafeMode",
                 chkSafeMode.Checked ? "True" : "False");
-
+            profile.WriteValue(driverId,"OpenPulseCount",txtOpenPulseCount.Text);
             profile.WriteValue(driverId, "AutoClose",
                 chkAutoClose.Checked ? "True" : "False");
 
