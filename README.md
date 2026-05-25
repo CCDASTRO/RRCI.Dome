@@ -1,191 +1,339 @@
-This project is an ASCOM Dome driver for a roll-off-roof telescope observatory that is controlled using an Arduino Uno, it is released under the Cretative Commons Zero 1.0 Universal license, except that commercial use is prohibited without prior permission.
-1. Arduino Firmware Changes
+observatory automation system with layered safety, telemetry, and live monitoring.
 
-the following features were added.
+Firmware Enhancements
 
-New Hardware Input
-Hall-Effect Motion Sensor
-Connected to Arduino pin D2
-Detects roof movement using a magnet attached to a wheel or pulley
-Generates pulses while the roof is moving
-New Runtime Options
-Scope Safe
+The Arduino firmware was expanded to support:
 
-Controlled by:
+Hall-effect pulse counting
+Edge-triggered motion detection
+getpulsecount serial command
+Motion watchdog support
+Overshoot-capable telemetry
+Improved serial reliability
+Reconnect-safe command handling
+Cleaner movement state tracking
 
-setsafe:1
-setsafe:0
+The firmware now supports both:
 
-When disabled, the safe input is ignored and always treated as safe.
+basic limit-switch-only operation,
+and enhanced pulse-monitored operation.
+ASCOM Driver Enhancements
 
-Motion Sensor
+The Dome.cs driver was significantly upgraded.
 
-Controlled by:
+Added Shared Telemetry System
 
-setmotion:1
-setmotion:0
+A new shared telemetry layer was created:
 
-When disabled, motion pulses are not required.
+RoofTelemetry
 
-Motion Stall Detection
+to centralize:
 
-When Motion Sensor is enabled:
+roof state,
+pulse count,
+percent open,
+faults,
+movement timing,
+limit states.
 
-Firmware expects motion pulses while opening or closing
-If no pulses are detected for 3 seconds, state changes to ERROR
-Motion Pulse Count
+This allows:
 
-Firmware counts pulses and includes them in the status response:
+driver logic,
+UI,
+watchdogs,
+and diagnostics
 
-STATE:OPENING;SAFE;PULSES:12;MOVING#
-New Serial Commands
-Command	Function
-setsafe:1	Enable scope safety
-setsafe:0	Disable scope safety
-setmotion:1	Enable Hall sensor monitoring
-setmotion:0	Disable Hall sensor monitoring
+to all share the same state cleanly.
 
-2. Dome.cs Changes
+Shutter State Machine Improvements
 
-The ASCOM dome driver was enhanced significantly.
+ShutterStatus was upgraded to:
 
-ASCOM Trace Logging
-
-Added:
-
-private readonly TraceLogger tl;
-
-The driver logs:
-
-Connection events
-Serial commands sent and responses received
-State changes
-Errors and timeouts
-
-Logging is controlled by the TraceLogger profile setting.
-
-New Profile Settings Read
-Setting	Purpose
-COM	Serial port
-Baud	Baud rate
-SafeMode	Enable scope safe input
-MotionSensor	Enable Hall sensor
-TraceLogger	Enable ASCOM logging
-Runtime Configuration Commands
-
-After connecting, the driver sends:
-
-setsafe:1 or setsafe:0
-setmotion:1 or setmotion:0
-Improved Serial Query Method
-
-Centralized Query() method:
-
-Sends command
-Waits for response
-Logs TX/RX
-Enforces timeout
-Improved Shutter State Machine
+synchronize telemetry,
+handle fault propagation,
+update motion state,
+expose live roof status,
+and preserve backward compatibility.
+Pulse Polling System
 
 The driver now:
 
-Tracks whether an open or close command is active
-Waits for confirmation from limit switches
-Uses a 2-second grace period after issuing commands
-Times out after 120 seconds
-Returns shutterError if something goes wrong
-Motion Sensor Integration
+polls Arduino pulse count,
+calculates roof percentage,
+tracks last pulse timing,
+verifies active movement.
 
-The driver does not need to count pulses itself. The firmware monitors movement and reports ERROR if motion stops.
+This added:
 
-3. SetupDialogForm.cs Changes
-New Checkbox
+real roof position estimation,
+pulse-based movement verification.
+Safety Improvements
+Hall Pulse Stall Detection
 
-Added:
+If the roof is commanded to move but pulses stop arriving:
 
-chkMotionSensor
-Existing Checkbox Used
+movement aborts,
+fault state is raised.
 
-Already present:
+This protects against:
 
-chkTraceLogging
-Settings Loaded and Saved
+jams,
+motor stalls,
+slipping mechanisms,
+broken hall wiring.
+Hard Failsafe Timeout
 
-The setup dialog now loads and saves:
+A separate absolute movement timeout was retained.
 
-COM
-Baud
-DeviceId
-SafeMode
-RainSensor
-AutoClose
-MotionSensor
-TraceLogger
+This protects against:
 
-4. User Workflow
-Open the ASCOM Setup Dialog.
-Select COM port and baud rate.
-Enable or disable:
-Scope Safe
-Motion Sensor
-Trace Logging
-Click OK.
-Settings are stored in the ASCOM Profile.
-On connection:
-Driver reads settings.
-Driver enables or disables features in the Arduino.
-During operation:
-Firmware monitors limit switches.
-Optional Hall sensor confirms motion.
-Errors are reported if movement stalls.
+firmware hangs,
+serial failures,
+logic failures,
+unexpected edge cases.
 
-5. Backward Compatibility
+You now have layered protection:
 
-If both checkboxes are unchecked:
+pulse-based verification,
+plus absolute timeout backup.
+Overshoot Protection
 
-Firmware behaves exactly like your original version.
-No Hall sensor is required.
-Safe input is ignored.
+The driver now detects:
 
-6. Recommended Hardware for Hall Sensor
-A magnet attached to a moving wheel, pulley, or sprocket
-Hall-effect sensor mounted nearby
-Output wired to Arduino D2
-GND and +5V as required by the sensor module
+pulse counts exceeding calibrated open travel.
 
-7. Error Detection Improvements
+This protects against:
 
-The system can now detect:
+failed limit switches,
+runaway relays,
+uncontrolled motion.
+SetupDialog Improvements
 
-Roof stalled mechanically
-Broken belt/chain
-Motor running but roof not moving
-Unsafe scope position
-Motion timeout
-Missing serial response
+The configuration UI was expanded to support:
 
-8. ASCOM Trace Logs
+hall sensor enable/disable,
+pulse calibration storage,
+persistent telemetry configuration.
 
-When Trace Logging is enabled, ASCOM logs include:
+The driver now stores:
 
-Connection details
-Commands sent
-Responses received
-State transitions
-Exceptions
+fully-open pulse count,
+motion sensor enable state,
+existing ASCOM settings.
+Live Status Window
 
-These logs are useful for troubleshooting.
+A new diagnostics/status window was added.
 
+Features:
+
+auto-open on connect,
+auto-close on disconnect,
+always-on-top utility display,
+live telemetry updates.
+
+The UI displays:
+
+roof state,
+pulse count,
+percent open,
+fault status,
+progress bar.
+
+The window is driver-controlled and cannot accidentally be closed.
+
+Backward Compatibility
+
+The system still fully supports:
+
+operation without a hall sensor,
+traditional limit-switch-only control.
+
+If the motion sensor option is disabled:
+
+pulse logic is bypassed,
+original behavior remains intact.
 Final Result
 
-RRCI now provides:
+The final system now includes:
 
-ASCOM-compliant dome control
-Optional scope safety interlock
-Optional Hall-effect motion verification
-Automatic stall detection
-Detailed trace logging
-Robust serial communications
-Full backward compatibility with existing hardware
+ASCOM IDomeV2 compatibility
+NINA compatibility
+telemetry-driven monitoring
+pulse-based movement verification
+layered fault protection
+live diagnostics UI
+reconnect-safe serial handling
+observatory-grade safety logic
 
-This with the hall effect movement sensor makes the system substantially more reliable and better able to detect real mechanical problems during roof operation.
+The project evolved from:
+
+a simple relay roof controller
+
+into:
+
+a real observatory automation roof control system suitable for unattended operation.
+Firmware Enhancements
+
+The Arduino firmware was expanded to support:
+
+Hall-effect pulse counting
+Edge-triggered motion detection
+getpulsecount serial command
+Motion watchdog support
+Overshoot-capable telemetry
+Improved serial reliability
+Reconnect-safe command handling
+Cleaner movement state tracking
+
+The firmware now supports both:
+
+basic limit-switch-only operation,
+and enhanced pulse-monitored operation.
+ASCOM Driver Enhancements
+
+The Dome.cs driver was significantly upgraded.
+
+Added Shared Telemetry System
+
+A new shared telemetry layer was created:
+
+RoofTelemetry
+
+to centralize:
+
+roof state,
+pulse count,
+percent open,
+faults,
+movement timing,
+limit states.
+
+This allows:
+
+driver logic,
+UI,
+watchdogs,
+and diagnostics
+
+to all share the same state cleanly.
+
+Shutter State Machine Improvements
+
+ShutterStatus was upgraded to:
+
+synchronize telemetry,
+handle fault propagation,
+update motion state,
+expose live roof status,
+and preserve backward compatibility.
+Pulse Polling System
+
+The driver now:
+
+polls Arduino pulse count,
+calculates roof percentage,
+tracks last pulse timing,
+verifies active movement.
+
+This added:
+
+real roof position estimation,
+pulse-based movement verification.
+Safety Improvements
+Hall Pulse Stall Detection
+
+If the roof is commanded to move but pulses stop arriving:
+
+movement aborts,
+fault state is raised.
+
+This protects against:
+
+jams,
+motor stalls,
+slipping mechanisms,
+broken hall wiring.
+Hard Failsafe Timeout
+
+A separate absolute movement timeout was retained.
+
+This protects against:
+
+firmware hangs,
+serial failures,
+logic failures,
+unexpected edge cases.
+
+You now have layered protection:
+
+pulse-based verification,
+plus absolute timeout backup.
+Overshoot Protection
+
+The driver now detects:
+
+pulse counts exceeding calibrated open travel.
+
+This protects against:
+
+failed limit switches,
+runaway relays,
+uncontrolled motion.
+SetupDialog Improvements
+
+The configuration UI was expanded to support:
+
+hall sensor enable/disable,
+pulse calibration storage,
+persistent telemetry configuration.
+
+The driver now stores:
+
+fully-open pulse count,
+motion sensor enable state,
+existing ASCOM settings.
+Live Status Window
+
+A new diagnostics/status window was added.
+
+Features:
+
+auto-open on connect,
+auto-close on disconnect,
+always-on-top utility display,
+live telemetry updates.
+
+The UI displays:
+
+roof state,
+pulse count,
+percent open,
+fault status,
+progress bar.
+
+The window is driver-controlled and cannot accidentally be closed.
+
+Backward Compatibility
+
+The system still fully supports:
+
+operation without a hall sensor,
+traditional limit-switch-only control.
+
+If the motion sensor option is disabled:
+
+pulse logic is bypassed,
+original behavior remains intact.
+Final Result
+
+system now includes:
+
+ASCOM IDomeV2 compatibility
+NINA compatibility
+telemetry-driven monitoring
+pulse-based movement verification
+layered fault protection
+live diagnostics UI
+reconnect-safe serial handling
+observatory-grade safety logic
+
