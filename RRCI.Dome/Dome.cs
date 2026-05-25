@@ -1,10 +1,12 @@
 ﻿using ASCOM;
 using ASCOM.DeviceInterface;
 using ASCOM.Utilities;
+using RRCI.Dome;
 using System;
 using System.Collections;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Windows.Forms;
 
 namespace RRCI.DomeDriver
 {
@@ -29,8 +31,9 @@ namespace RRCI.DomeDriver
         private bool openingCommandActive;
         private bool closingCommandActive;
         private DateTime motionStartTime;
-
-private int lastPulseCount = 0;
+        private StatusForm statusForm;
+        private Thread statusThread;
+        private int lastPulseCount = 0;
 
 private DateTime lastPulseCheckTime =
     DateTime.MinValue;
@@ -210,7 +213,31 @@ private DateTime lastPulseCheckTime =
 
                 StartHeartbeat();
 
-                tl.LogMessage("Connect", $"SafeMode={SafeModeEnabled}, MotionSensor={MotionSensorEnabled}");
+                // -------------------------------------
+                // Open live status window
+                // -------------------------------------
+
+                if (statusThread == null)
+                {
+                    statusThread = new Thread(() =>
+                    {
+                        statusForm = new StatusForm();
+
+                        Application.Run(statusForm);
+                    });
+
+                    statusThread.SetApartmentState(
+                        ApartmentState.STA);
+
+                    statusThread.IsBackground = true;
+
+                    statusThread.Start();
+                }
+
+                tl.LogMessage(
+                    "Connect",
+                    $"SafeMode={SafeModeEnabled}, MotionSensor={MotionSensorEnabled}");
+
                 tl.LogMessage("Connect", "Connected");
             }
             catch (Exception ex)
@@ -235,6 +262,28 @@ private DateTime lastPulseCheckTime =
 
             RoofTelemetry.ShutterState =
                 "Disconnected";
+            // -------------------------------------
+            // Close status window
+            // -------------------------------------
+
+            if (statusForm != null)
+            {
+                try
+                {
+                    statusForm.Invoke(
+                        new Action(() =>
+                        {
+                            statusForm.Close();
+                        }));
+                }
+                catch
+                {
+                }
+
+                statusForm = null;
+            }
+
+            statusThread = null;
             StopHeartbeat();
             CleanupSerial();
 

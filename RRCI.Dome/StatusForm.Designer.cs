@@ -40,7 +40,7 @@
             // lblState
             // 
             this.lblState.AutoSize = true;
-            this.lblState.Location = new System.Drawing.Point(0, 9);
+            this.lblState.Location = new System.Drawing.Point(12, 9);
             this.lblState.Name = "lblState";
             this.lblState.Size = new System.Drawing.Size(32, 13);
             this.lblState.TabIndex = 0;
@@ -49,7 +49,7 @@
             // lblPercent
             // 
             this.lblPercent.AutoSize = true;
-            this.lblPercent.Location = new System.Drawing.Point(0, 38);
+            this.lblPercent.Location = new System.Drawing.Point(11, 94);
             this.lblPercent.Name = "lblPercent";
             this.lblPercent.Size = new System.Drawing.Size(44, 13);
             this.lblPercent.TabIndex = 1;
@@ -58,7 +58,7 @@
             // lblPulses
             // 
             this.lblPulses.AutoSize = true;
-            this.lblPulses.Location = new System.Drawing.Point(64, 9);
+            this.lblPulses.Location = new System.Drawing.Point(12, 34);
             this.lblPulses.Name = "lblPulses";
             this.lblPulses.Size = new System.Drawing.Size(38, 13);
             this.lblPulses.TabIndex = 2;
@@ -67,7 +67,7 @@
             // lblFault
             // 
             this.lblFault.AutoSize = true;
-            this.lblFault.Location = new System.Drawing.Point(149, 9);
+            this.lblFault.Location = new System.Drawing.Point(12, 62);
             this.lblFault.Name = "lblFault";
             this.lblFault.Size = new System.Drawing.Size(30, 13);
             this.lblFault.TabIndex = 3;
@@ -75,16 +75,20 @@
             // 
             // progressRoof
             // 
-            this.progressRoof.Location = new System.Drawing.Point(79, 38);
+            this.progressRoof.Location = new System.Drawing.Point(78, 94);
             this.progressRoof.Name = "progressRoof";
             this.progressRoof.Size = new System.Drawing.Size(100, 23);
             this.progressRoof.TabIndex = 4;
+            // 
+            // timer1
+            // 
+            this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
             // StatusForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(194, 78);
+            this.ClientSize = new System.Drawing.Size(211, 137);
             this.ControlBox = false;
             this.Controls.Add(this.progressRoof);
             this.Controls.Add(this.lblFault);
@@ -96,6 +100,7 @@
             this.Name = "StatusForm";
             this.Text = "Roof Status";
             this.TopMost = true;
+            this.Load += new System.EventHandler(this.StatusForm_Load);
             this.ResumeLayout(false);
             this.PerformLayout();
 

@@ -142,9 +142,9 @@ public partial class SetupDialogForm : Form
             this.lblOpenPulseCount.AutoSize = true;
             this.lblOpenPulseCount.Location = new System.Drawing.Point(12, 101);
             this.lblOpenPulseCount.Name = "lblOpenPulseCount";
-            this.lblOpenPulseCount.Size = new System.Drawing.Size(35, 13);
+            this.lblOpenPulseCount.Size = new System.Drawing.Size(93, 13);
             this.lblOpenPulseCount.TabIndex = 11;
-            this.lblOpenPulseCount.Text = "label2";
+            this.lblOpenPulseCount.Text = "Open Pulse Count";
             // 
             // txtOpenPulseCount
             // 
