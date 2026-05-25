@@ -44,6 +44,7 @@ private DateTime lastPulseCheckTime =
         {
             tl = new TraceLogger("", DriverId);
             tl.Enabled = TraceEnabled;
+            supportedActions.Add("Calibrate");
             tl.LogMessage("Constructor", "Driver starting");
         }
 
@@ -488,8 +489,20 @@ private DateTime lastPulseCheckTime =
                         0,
                         Math.Min(100, percent));
 
-                    RoofTelemetry.PercentOpen =
-                        percent;
+                    // ---------------------------------
+                    // Reverse percentage while closing
+                    // ---------------------------------
+
+                    if (closingCommandActive)
+                    {
+                        RoofTelemetry.PercentOpen =
+                            100 - percent;
+                    }
+                    else
+                    {
+                        RoofTelemetry.PercentOpen =
+                            percent;
+                    }
                 }
 
                 // -------------------------------------
@@ -932,7 +945,89 @@ private DateTime lastPulseCheckTime =
             RoofTelemetry.LastPulseTime =
                 DateTime.Now;
         }
+        private void CalibrateOpenPulses()
+        {
+            EnsureConnected();
 
+            tl.LogMessage(
+                "Calibration",
+                "Starting calibration");
+
+            // -------------------------------------
+            // Reset pulse counter
+            // -------------------------------------
+
+            Query("resetpulse", 3000);
+
+            Thread.Sleep(1000);
+
+            // -------------------------------------
+            // Open roof
+            // -------------------------------------
+
+            OpenShutter();
+
+            // -------------------------------------
+            // Wait for completion
+            // -------------------------------------
+
+            DateTime timeout =
+                DateTime.Now.AddMinutes(5);
+
+            while (DateTime.Now < timeout)
+            {
+                Thread.Sleep(500);
+
+                ShutterState state =
+                    ShutterStatus;
+
+                if (state ==
+                    ShutterState.shutterOpen)
+                {
+                    break;
+                }
+
+                if (state ==
+                    ShutterState.shutterError)
+                {
+                    throw new DriverException(
+                        "Calibration failed");
+                }
+            }
+
+            // -------------------------------------
+            // Final pulse count
+            // -------------------------------------
+
+            int pulses =
+                RoofTelemetry.CurrentPulseCount;
+
+            // Add 2% tolerance
+            pulses =
+                (int)(pulses * 1.02);
+
+            RoofTelemetry.OpenPulseCount =
+                pulses;
+
+            // -------------------------------------
+            // Save profile setting
+            // -------------------------------------
+
+            using (Profile profile =
+                new Profile())
+            {
+                profile.DeviceType = "Dome";
+
+                profile.WriteValue(
+                    DriverId,
+                    "OpenPulseCount",
+                    pulses.ToString());
+            }
+
+            tl.LogMessage(
+                "Calibration",
+                $"OpenPulseCount={pulses}");
+        }
         public void AbortSlew()
         {
             try
@@ -977,7 +1072,23 @@ private DateTime lastPulseCheckTime =
 
         #region ASCOM Required Members
 
-        public string Action(string actionName, string actionParameters) => string.Empty;
+        public string Action(
+    string actionName,
+    string actionParameters)
+        {
+            if (string.Equals(
+                actionName,
+                "Calibrate",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                CalibrateOpenPulses();
+
+                return "Calibration Complete";
+            }
+
+            throw new ActionNotImplementedException(
+                actionName);
+        }
         public ArrayList SupportedActions => supportedActions;
 
         public void SetupDialog()

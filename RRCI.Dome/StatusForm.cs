@@ -66,5 +66,30 @@ namespace RRCI.Dome
 
             progressRoof.Value = value;
         }
+
+        private void btnCalibrate_Click(
+    object sender,
+    EventArgs e)
+        {
+            try
+            {
+                ASCOM.DriverAccess.Dome dome =
+                    new ASCOM.DriverAccess.Dome(
+                        "RRCI.Dome");
+
+                MessageBox.Show(
+                    "Calibration starting.\n\n"
+                    + "Roof will fully open.");
+
+                string result =
+                    dome.Action("Calibrate", "");
+
+                MessageBox.Show(result);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
     }
 }

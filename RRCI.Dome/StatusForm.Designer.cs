@@ -35,6 +35,7 @@
             this.lblFault = new System.Windows.Forms.Label();
             this.progressRoof = new System.Windows.Forms.ProgressBar();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
+            this.btnCalibrate = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // lblState
@@ -84,12 +85,23 @@
             // 
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
+            // btnCalibrate
+            // 
+            this.btnCalibrate.Location = new System.Drawing.Point(66, 134);
+            this.btnCalibrate.Name = "btnCalibrate";
+            this.btnCalibrate.Size = new System.Drawing.Size(75, 23);
+            this.btnCalibrate.TabIndex = 5;
+            this.btnCalibrate.Text = "Calibrate";
+            this.btnCalibrate.UseVisualStyleBackColor = true;
+            this.btnCalibrate.Click += new System.EventHandler(this.btnCalibrate_Click);
+            // 
             // StatusForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(211, 137);
+            this.ClientSize = new System.Drawing.Size(211, 169);
             this.ControlBox = false;
+            this.Controls.Add(this.btnCalibrate);
             this.Controls.Add(this.progressRoof);
             this.Controls.Add(this.lblFault);
             this.Controls.Add(this.lblPulses);
@@ -114,5 +126,6 @@
         private System.Windows.Forms.Label lblFault;
         private System.Windows.Forms.ProgressBar progressRoof;
         private System.Windows.Forms.Timer timer1;
+        private System.Windows.Forms.Button btnCalibrate;
     }
 }
