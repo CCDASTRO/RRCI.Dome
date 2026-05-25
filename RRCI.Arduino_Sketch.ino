@@ -491,6 +491,7 @@ void StartOpen()
 
   lastMotionTime = moveStart;
 
+  // Reset pulse count only when opening
   motionPulseCount = 0;
 
   lastMotionState = false;
@@ -518,7 +519,9 @@ void StartClose()
 
   lastMotionTime = moveStart;
 
-  motionPulseCount = 0;
+  // DO NOT reset pulse count here
+  // We need existing pulse position
+  // for proper close percentage tracking
 
   lastMotionState = false;
 
@@ -551,6 +554,9 @@ void StopAll()
   StopAllRelays();
 
   lastMotionState = false;
+
+  // Reset timeout tracking
+  lastMotionTime = millis();
 
   if (IsOpen())
     state = OPEN;
