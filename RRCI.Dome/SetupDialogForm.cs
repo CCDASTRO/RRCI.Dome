@@ -156,6 +156,7 @@ public partial class SetupDialogForm : Form
             // SetupDialogForm
             // 
             this.ClientSize = new System.Drawing.Size(266, 192);
+            this.ControlBox = false;
             this.Controls.Add(this.txtOpenPulseCount);
             this.Controls.Add(this.lblOpenPulseCount);
             this.Controls.Add(this.chkMotionSensor);
