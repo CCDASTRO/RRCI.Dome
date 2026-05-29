@@ -833,13 +833,43 @@ private DateTime lastPulseCheckTime =
                     }
 
                     // -------------------------------------------------
+                    // Controller reported OPENING
+                    // -------------------------------------------------
+
+                    if (status.Contains("OPENING"))
+                    {
+                        RoofTelemetry.ShutterState =
+                            "Opening";
+
+                        return lastKnownShutterState =
+                            ShutterState.shutterOpening;
+                    }
+
+                    // -------------------------------------------------
+                    // Controller reported CLOSING
+                    // -------------------------------------------------
+
+                    if (status.Contains("CLOSING"))
+                    {
+                        RoofTelemetry.ShutterState =
+                            "Closing";
+
+                        return lastKnownShutterState =
+                            ShutterState.shutterClosing;
+                    }
+
+                    // -------------------------------------------------
                     // Unknown state
                     // -------------------------------------------------
 
-                    RoofTelemetry.ShutterState = "Error";
+                    tl.LogMessage(
+                        "ShutterStatus",
+                        "Unknown status: " + status);
 
-                    return lastKnownShutterState =
-                        ShutterState.shutterError;
+                    RoofTelemetry.ShutterState =
+                        "Unknown";
+
+                    return lastKnownShutterState;
                 }
                 catch (Exception ex)
                 {
