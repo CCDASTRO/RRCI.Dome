@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RRCI Firmware V2 Roadmap</title>
+
+<style>
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 40px;
+    line-height: 1.6;
+}
+
+h1 {
+    color: #003366;
+}
+
+h2 {
+    color: #004c99;
+    border-bottom: 1px solid #cccccc;
+    padding-bottom: 4px;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+table, th, td {
+    border: 1px solid #cccccc;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
+
+code {
+    background: #f4f4f4;
+    padding: 2px 4px;
+}
+
+.note {
+    background: #ffffe0;
+    border: 1px solid #cccc99;
+    padding: 10px;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>RRCI Firmware V2 Development Roadmap</h1>
+
+<p>
+This document outlines the proposed architecture and development plan
+for RRCI Firmware Version 2.
+</p>
+
+<p>
+The primary goal is to preserve full backward compatibility with
+existing Aleko single-button installations while allowing support
+for future motor controllers that require dedicated Open, Close,
+and Stop inputs.
+</p>
+
+<hr>
+
+<h2>Design Goals</h2>
+
+<ul>
+<li>Maintain 100% compatibility with existing RRCI V1 installations.</li>
+<li>Support multiple controller architectures.</li>
+<li>Require no ASCOM driver changes.</li>
+<li>Preserve existing serial command protocol.</li>
+<li>Improve relay abstraction and maintainability.</li>
+<li>Support future commercial and industrial roof motors.</li>
+</ul>
+
+<hr>
+
+<h2>Supported Controller Types</h2>
+
+<table>
+<tr>
+<th>Mode</th>
+<th>Description</th>
+<th>Inputs</th>
+</tr>
+
+<tr>
+<td>Mode 1</td>
+<td>Aleko Single Button</td>
+<td>Open / Stop / Close cycle via one input</td>
+</tr>
+
+<tr>
+<td>Mode 2</td>
+<td>Open / Close Controller</td>
+<td>Dedicated Open and Close inputs</td>
+</tr>
+
+<tr>
+<td>Mode 3</td>
+<td>Open / Close / Stop Controller</td>
+<td>Dedicated Open, Close and Stop inputs</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Controller Type Enumeration</h2>
+
+<pre>
+enum ControllerType
+{
+    ALEKO_SINGLE_BUTTON = 1,
+    OPEN_CLOSE = 2,
+    OPEN_CLOSE_STOP = 3
+};
+</pre>
+
+<hr>
+
+<h2>Relay Architecture</h2>
+
+<p>
+Firmware V2 separates roof actions from physical relay hardware.
+</p>
+
+<h3>Relay Assignments</h3>
+
+<pre>
+#define RELAY_OPEN      7
+#define RELAY_CLOSE     6
+#define RELAY_STOP      5
+#define RELAY_SPARE     4
+</pre>
+
+<h3>Abstraction Layer</h3>
+
+<pre>
+PulseOpenRelay();
+PulseCloseRelay();
+PulseStopRelay();
+</pre>
+
+<p>
+Roof control code should never manipulate relay pins directly.
+All relay access should occur through these functions.
+</p>
+
+<hr>
+
+<h2>Roof Action Layer</h2>
+
+<pre>
+OpenRoof();
+CloseRoof();
+AbortRoof();
+</pre>
+
+<p>
+These functions become the only entry points for roof motion.
+</p>
+
+<p>
+Behavior changes automatically based on configured controller type.
+</p>
+
+<hr>
+
+<h2>ASCOM Driver Compatibility</h2>
+
+<p>
+No changes are required to the existing ASCOM driver.
+</p>
+
+<p>
+The driver continues sending:
+</p>
+
+<pre>
+open
+close
+abort
+status
+ping
+</pre>
+
+<p>
+Firmware V2 translates those commands internally.
+</p>
+
+<hr>
+
+<h2>Command Mapping</h2>
+
+<table>
+
+<tr>
+<th>Action</th>
+<th>Mode 1</th>
+<th>Mode 2</th>
+<th>Mode 3</th>
+</tr>
+
+<tr>
+<td>Open Roof</td>
+<td>Pulse OPEN relay</td>
+<td>Pulse OPEN relay</td>
+<td>Pulse OPEN relay</td>
+</tr>
+
+<tr>
+<td>Close Roof</td>
+<td>Pulse OPEN relay</td>
+<td>Pulse CLOSE relay</td>
+<td>Pulse CLOSE relay</td>
+</tr>
+
+<tr>
+<td>Abort Roof</td>
+<td>Pulse OPEN relay</td>
+<td>No action</td>
+<td>Pulse STOP relay</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Runtime Configuration Commands</h2>
+
+<p>
+Future firmware versions may allow runtime configuration.
+</p>
+
+<table>
+
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+
+<tr>
+<td>setmode:1</td>
+<td>Select Aleko Single Button Mode</td>
+</tr>
+
+<tr>
+<td>setmode:2</td>
+<td>Select Open/Close Mode</td>
+</tr>
+
+<tr>
+<td>setmode:3</td>
+<td>Select Open/Close/Stop Mode</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>EEPROM Storage</h2>
+
+<p>
+Controller type should be stored in EEPROM.
+</p>
+
+<pre>
+EEPROM Address 0
+
+ControllerType
+</pre>
+
+<p>
+On startup:
+</p>
+
+<pre>
+controllerType =
+    (ControllerType)EEPROM.read(0);
+</pre>
+
+<p>
+Invalid values automatically revert to:
+</p>
+
+<pre>
+ALEKO_SINGLE_BUTTON
+</pre>
+
+<hr>
+
+<h2>Status Reporting Enhancements</h2>
+
+<p>
+Current status response:
+</p>
+
+<pre>
+STATE:OPEN;SAFE;MOVING#
+</pre>
+
+<p>
+Proposed V2 response:
+</p>
+
+<pre>
+STATE:OPEN;
+SAFE;
+MODE:1;
+MOVING#
+</pre>
+
+<p>
+This allows diagnostics software to determine the active controller type.
+</p>
+
+<hr>
+
+<h2>Future Enhancements</h2>
+
+<ul>
+<li>Web-based configuration page</li>
+<li>EEPROM-backed settings storage</li>
+<li>Remote firmware update support</li>
+<li>Network telemetry</li>
+<li>Relay activity diagnostics</li>
+<li>Motion history logging</li>
+<li>Controller auto-detection</li>
+</ul>
+
+<hr>
+
+<h2>Backward Compatibility Commitment</h2>
+
+<div class="note">
+
+<strong>Important:</strong>
+
+<p>
+Default firmware behavior shall remain:
+</p>
+
+<pre>
+ALEKO_SINGLE_BUTTON
+</pre>
+
+<p>
+Existing observatories must continue operating exactly as they do
+today after upgrading to Firmware V2.
+</p>
+
+<p>
+No ASCOM driver modifications should be required.
+</p>
+
+</div>
+
+<hr>
+
+<h2>Project Status</h2>
+
+<table>
+
+<tr>
+<th>Feature</th>
+<th>Status</th>
+</tr>
+
+<tr>
+<td>Architecture Design</td>
+<td>Complete</td>
+</tr>
+
+<tr>
+<td>Relay Abstraction Layer</td>
+<td>Planned</td>
+</tr>
+
+<tr>
+<td>Controller Mode Support</td>
+<td>Planned</td>
+</tr>
+
+<tr>
+<td>EEPROM Storage</td>
+<td>Planned</td>
+</tr>
+
+<tr>
+<td>ASCOM Integration</td>
+<td>Compatible</td>
+</tr>
+
+<tr>
+<td>Hardware Validation</td>
+<td>Pending</td>
+</tr>
+
+</table>
+
+</body>
+</html>
