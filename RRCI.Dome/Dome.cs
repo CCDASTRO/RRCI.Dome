@@ -211,6 +211,10 @@ private DateTime lastPulseCheckTime =
 
                 Query(SafeModeEnabled ? "setsafe:1" : "setsafe:0");
                 Query(MotionSensorEnabled ? "setmotion:1" : "setmotion:0");
+                string controllerType = GetSetting( "ControllerType", "1");
+
+                Query("setmode:" + controllerType);
+                tl.LogMessage("Connect", $"ControllerType={controllerType}");
 
                 StartHeartbeat();
 
@@ -1130,7 +1134,7 @@ private DateTime lastPulseCheckTime =
         }
 
         public string DriverInfo => "Driver for Arduino Roof Controller";
-        public string DriverVersion => "1.3.1";
+        public string DriverVersion => "1.1.12";
         public short InterfaceVersion => 2;
         public string Name => "Rolling Roof Controller Interface";
         public string Description => "ASCOM Roof Controller";

@@ -19,6 +19,10 @@ public partial class SetupDialogForm : Form
     private CheckBox chkMotionSensor;
     private Label lblOpenPulseCount;
     private TextBox txtOpenPulseCount;
+    private GroupBox groupBox1;
+    private RadioButton radioOpenCloseStop;
+    private RadioButton radioAleko;
+    private RadioButton radioOpenClose;
     private bool _isLoading = false;
 
     public SetupDialogForm()
@@ -40,11 +44,16 @@ public partial class SetupDialogForm : Form
             this.chkMotionSensor = new System.Windows.Forms.CheckBox();
             this.lblOpenPulseCount = new System.Windows.Forms.Label();
             this.txtOpenPulseCount = new System.Windows.Forms.TextBox();
+            this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.radioAleko = new System.Windows.Forms.RadioButton();
+            this.radioOpenCloseStop = new System.Windows.Forms.RadioButton();
+            this.radioOpenClose = new System.Windows.Forms.RadioButton();
+            this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
             // btnOK
             // 
-            this.btnOK.Location = new System.Drawing.Point(40, 157);
+            this.btnOK.Location = new System.Drawing.Point(39, 221);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(75, 23);
             this.btnOK.TabIndex = 7;
@@ -54,7 +63,7 @@ public partial class SetupDialogForm : Form
             // 
             // btnCancel
             // 
-            this.btnCancel.Location = new System.Drawing.Point(148, 157);
+            this.btnCancel.Location = new System.Drawing.Point(147, 221);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 8;
@@ -111,7 +120,7 @@ public partial class SetupDialogForm : Form
             // txtDeviceId
             // 
             this.txtDeviceId.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.txtDeviceId.Location = new System.Drawing.Point(13, 131);
+            this.txtDeviceId.Location = new System.Drawing.Point(12, 195);
             this.txtDeviceId.Name = "txtDeviceId";
             this.txtDeviceId.Size = new System.Drawing.Size(242, 20);
             this.txtDeviceId.TabIndex = 6;
@@ -153,10 +162,56 @@ public partial class SetupDialogForm : Form
             this.txtOpenPulseCount.Size = new System.Drawing.Size(100, 20);
             this.txtOpenPulseCount.TabIndex = 12;
             // 
+            // groupBox1
+            // 
+            this.groupBox1.Controls.Add(this.radioOpenClose);
+            this.groupBox1.Controls.Add(this.radioOpenCloseStop);
+            this.groupBox1.Controls.Add(this.radioAleko);
+            this.groupBox1.Location = new System.Drawing.Point(15, 127);
+            this.groupBox1.Name = "groupBox1";
+            this.groupBox1.Size = new System.Drawing.Size(227, 62);
+            this.groupBox1.TabIndex = 13;
+            this.groupBox1.TabStop = false;
+            this.groupBox1.Text = "Controller Type";
+            // 
+            // radioAleko
+            // 
+            this.radioAleko.AutoSize = true;
+            this.radioAleko.Location = new System.Drawing.Point(15, 19);
+            this.radioAleko.Name = "radioAleko";
+            this.radioAleko.Size = new System.Drawing.Size(65, 17);
+            this.radioAleko.TabIndex = 0;
+            this.radioAleko.TabStop = true;
+            this.radioAleko.Text = "1-Button";
+            this.radioAleko.UseVisualStyleBackColor = true;
+            // 
+            // radioOpenCloseStop
+            // 
+            this.radioOpenCloseStop.AutoSize = true;
+            this.radioOpenCloseStop.Location = new System.Drawing.Point(112, 19);
+            this.radioOpenCloseStop.Name = "radioOpenCloseStop";
+            this.radioOpenCloseStop.Size = new System.Drawing.Size(65, 17);
+            this.radioOpenCloseStop.TabIndex = 1;
+            this.radioOpenCloseStop.TabStop = true;
+            this.radioOpenCloseStop.Text = "3-Button";
+            this.radioOpenCloseStop.UseVisualStyleBackColor = true;
+            // 
+            // radioOpenClose
+            // 
+            this.radioOpenClose.AutoSize = true;
+            this.radioOpenClose.Location = new System.Drawing.Point(15, 42);
+            this.radioOpenClose.Name = "radioOpenClose";
+            this.radioOpenClose.Size = new System.Drawing.Size(65, 17);
+            this.radioOpenClose.TabIndex = 2;
+            this.radioOpenClose.TabStop = true;
+            this.radioOpenClose.Text = "2-Button";
+            this.radioOpenClose.UseVisualStyleBackColor = true;
+            // 
             // SetupDialogForm
             // 
-            this.ClientSize = new System.Drawing.Size(266, 192);
+            this.ClientSize = new System.Drawing.Size(266, 256);
             this.ControlBox = false;
+            this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.txtOpenPulseCount);
             this.Controls.Add(this.lblOpenPulseCount);
             this.Controls.Add(this.chkMotionSensor);
@@ -175,6 +230,8 @@ public partial class SetupDialogForm : Form
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "RRCI Dome Setup";
             this.Load += new System.EventHandler(this.SetupDialogForm_Load);
+            this.groupBox1.ResumeLayout(false);
+            this.groupBox1.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -212,7 +269,23 @@ public partial class SetupDialogForm : Form
         using (Profile profile = new Profile())
         {
             profile.DeviceType = "Dome";
+            
+            string controllerType = profile.GetValue(driverId, "ControllerType", "", "1");
 
+            switch (controllerType)
+            {
+                case "1":
+                    radioAleko.Checked = true;
+                    break;
+
+                case "2":
+                    radioOpenClose.Checked = true;
+                    break;
+
+                case "3":
+                    radioOpenCloseStop.Checked = true;
+                    break;
+            }
             comboPorts.Text = profile.GetValue(driverId, "COM", "", "");
             comboBaud.Text = profile.GetValue(driverId, "Baud", "", "9600");
             txtDeviceId.Text = profile.GetValue(driverId, "DeviceId", "", driverId);
@@ -238,7 +311,18 @@ public partial class SetupDialogForm : Form
     {
         using (Profile profile = new Profile())
         {
+                       
             profile.DeviceType = "Dome";
+
+            string controllerType = "1";
+
+            if (radioOpenClose.Checked)
+                controllerType = "2";
+
+            if (radioOpenCloseStop.Checked)
+                controllerType = "3";
+
+            profile.WriteValue(driverId, "ControllerType", controllerType);
 
             profile.WriteValue(driverId, "COM", comboPorts.Text);
             profile.WriteValue(driverId, "Baud", comboBaud.Text);
