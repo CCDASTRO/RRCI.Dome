@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RRCI Firmware V2 Multi-Controller Support</title>
+
+<style>
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 40px;
+    line-height: 1.6;
+}
+
+h1 {
+    color: #003366;
+}
+
+h2 {
+    color: #004c99;
+    border-bottom: 1px solid #cccccc;
+    padding-bottom: 4px;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+table, th, td {
+    border: 1px solid #cccccc;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
+
+pre {
+    background: #f4f4f4;
+    padding: 10px;
+    overflow-x: auto;
+}
+
+.note {
+    background: #ffffe0;
+    border: 1px solid #cccc99;
+    padding: 10px;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>RRCI Firmware V2 Multi-Controller Support</h1>
+
+<p>
+Firmware Version 2 extends the original RRCI roof controller firmware
+to support multiple motor controller architectures while maintaining
+100% backward compatibility with existing Aleko-based installations.
+</p>
+
+<hr>
+
+<h2>Supported Controller Types</h2>
+
+<pre>
+enum ControllerType
+{
+    ALEKO_SINGLE_BUTTON = 1,
+    OPEN_CLOSE = 2,
+    OPEN_CLOSE_STOP = 3
+};
+</pre>
+
+<table>
+
+<tr>
+<th>Mode</th>
+<th>Description</th>
+</tr>
+
+<tr>
+<td>1</td>
+<td>Aleko Single Button Controller</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>Dedicated Open / Close Controller</td>
+</tr>
+
+<tr>
+<td>3</td>
+<td>Dedicated Open / Close / Stop Controller</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Relay Assignments</h2>
+
+<pre>
+#define RELAY_OPEN      7
+#define RELAY_CLOSE     6
+#define RELAY_STOP      5
+#define RELAY_SPARE     4
+</pre>
+
+<hr>
+
+<h2>Controller Behavior</h2>
+
+<h3>Mode 1 - Aleko Single Button</h3>
+
+<table>
+
+<tr>
+<th>Command</th>
+<th>Relay Activated</th>
+</tr>
+
+<tr>
+<td>Open</td>
+<td>Relay 7</td>
+</tr>
+
+<tr>
+<td>Close</td>
+<td>Relay 7</td>
+</tr>
+
+<tr>
+<td>Abort</td>
+<td>Relay 7</td>
+</tr>
+
+</table>
+
+<p>
+The motor controller internally handles the sequence:
+</p>
+
+<pre>
+Open -> Stop -> Close -> Stop
+</pre>
+
+<hr>
+
+<h3>Mode 2 - Open / Close Controller</h3>
+
+<table>
+
+<tr>
+<th>Command</th>
+<th>Relay Activated</th>
+</tr>
+
+<tr>
+<td>Open</td>
+<td>Relay 7</td>
+</tr>
+
+<tr>
+<td>Close</td>
+<td>Relay 6</td>
+</tr>
+
+<tr>
+<td>Abort</td>
+<td>No Action</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h3>Mode 3 - Open / Close / Stop Controller</h3>
+
+<table>
+
+<tr>
+<th>Command</th>
+<th>Relay Activated</th>
+</tr>
+
+<tr>
+<td>Open</td>
+<td>Relay 7</td>
+</tr>
+
+<tr>
+<td>Close</td>
+<td>Relay 6</td>
+</tr>
+
+<tr>
+<td>Abort</td>
+<td>Relay 5</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Default Startup Mode</h2>
+
+<p>
+Firmware V2 defaults to Aleko compatibility mode:
+</p>
+
+<pre>
+ControllerType controllerType =
+    ALEKO_SINGLE_BUTTON;
+</pre>
+
+<p>
+This ensures all existing installations continue to operate exactly
+as they did under Firmware V1.
+</p>
+
+<hr>
+
+<h2>Runtime Mode Selection</h2>
+
+<p>
+Firmware V2 includes runtime mode switching commands:
+</p>
+
+<pre>
+setmode:1#
+setmode:2#
+setmode:3#
+</pre>
+
+<table>
+
+<tr>
+<th>Command</th>
+<th>Result</th>
+</tr>
+
+<tr>
+<td>setmode:1#</td>
+<td>Select Aleko Single Button Mode</td>
+</tr>
+
+<tr>
+<td>setmode:2#</td>
+<td>Select Open / Close Mode</td>
+</tr>
+
+<tr>
+<td>setmode:3#</td>
+<td>Select Open / Close / Stop Mode</td>
+</tr>
+
+</table>
+
+<p>
+These commands immediately change controller behavior without
+requiring firmware recompilation.
+</p>
+
+<hr>
+
+<h2>Method 1 - Manual Firmware Configuration</h2>
+
+<p>
+Advanced users may select the controller type directly within
+the firmware source code.
+</p>
+
+<pre>
+ControllerType controllerType =
+    ALEKO_SINGLE_BUTTON;
+</pre>
+
+<p>
+Change to:
+</p>
+
+<pre>
+ControllerType controllerType =
+    OPEN_CLOSE;
+</pre>
+
+<p>
+or:
+</p>
+
+<pre>
+ControllerType controllerType =
+    OPEN_CLOSE_STOP;
+</pre>
+
+<p>
+Then recompile and upload the firmware.
+</p>
+
+<hr>
+
+<h2>Method 2 - Serial Terminal Configuration</h2>
+
+<p>
+Connect using any serial terminal such as:
+</p>
+
+<ul>
+<li>Arduino Serial Monitor</li>
+<li>PuTTY</li>
+<li>TeraTerm</li>
+<li>RealTerm</li>
+</ul>
+
+<p>
+Send:
+</p>
+
+<pre>
+setmode:1#
+setmode:2#
+setmode:3#
+</pre>
+
+<p>
+The firmware immediately changes operating mode.
+</p>
+
+<div class="note">
+<strong>Important:</strong>
+Current implementation does not save mode selections to EEPROM.
+The controller returns to Aleko Single Button Mode after a reboot.
+</div>
+
+<hr>
+
+<h2>Method 3 - Future ASCOM Driver Integration</h2>
+
+<p>
+Future versions of the ASCOM driver may expose controller selection
+through the Setup Dialog.
+</p>
+
+<pre>
+Controller Type
+
+(*) Aleko Single Button
+( ) Open / Close
+( ) Open / Close / Stop
+</pre>
+
+<p>
+The driver would transmit:
+</p>
+
+<pre>
+setmode:1#
+setmode:2#
+setmode:3#
+</pre>
+
+<p>
+during connection.
+</p>
+
+<p>
+No firmware changes are required because support is already built into V2.
+</p>
+
+<hr>
+
+<h2>Future Enhancements</h2>
+
+<h3>EEPROM Storage</h3>
+
+<p>
+Store selected controller type in EEPROM:
+</p>
+
+<pre>
+EEPROM.write(0, controllerType);
+</pre>
+
+<p>
+Load at startup:
+</p>
+
+<pre>
+controllerType =
+    (ControllerType)EEPROM.read(0);
+</pre>
+
+<p>
+This allows mode selections to survive power cycles.
+</p>
+
+<hr>
+
+<h3>Status Reporting</h3>
+
+<p>
+Future firmware may include controller mode reporting:
+</p>
+
+<pre>
+STATE:OPEN;SAFE;MODE:1;IDLE#
+</pre>
+
+<p>
+This provides additional diagnostic information to ASCOM clients.
+</p>
+
+<hr>
+
+<h2>Project Status</h2>
+
+<table>
+
+<tr>
+<th>Feature</th>
+<th>Status</th>
+</tr>
+
+<tr>
+<td>Multi-Controller Architecture</td>
+<td>Complete</td>
+</tr>
+
+<tr>
+<td>Aleko Compatibility</td>
+<td>Complete</td>
+</tr>
+
+<tr>
+<td>Runtime Mode Switching</td>
+<td>Complete</td>
+</tr>
+
+<tr>
+<td>ASCOM Driver Integration</td>
+<td>Planned</td>
+</tr>
+
+<tr>
+<td>EEPROM Persistence</td>
+<td>Planned</td>
+</tr>
+
+<tr>
+<td>Mode Status Reporting</td>
+<td>Planned</td>
+</tr>
+
+</table>
+
+<hr>
+
+<h2>Summary</h2>
+
+<p>
+Firmware V2 maintains full backward compatibility with all existing
+Aleko installations while providing a scalable framework for future
+roof controllers requiring dedicated Open, Close, and Stop inputs.
+</p>
+
+</body>
+</html>
