@@ -106,7 +106,7 @@
             this.Controls.Add(this.lblPulses);
             this.Controls.Add(this.lblPercent);
             this.Controls.Add(this.lblState);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
             this.MaximizeBox = false;
             this.Name = "StatusForm";
             this.Text = "Roof Status";
