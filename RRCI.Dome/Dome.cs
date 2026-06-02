@@ -4,6 +4,7 @@ using ASCOM.Utilities;
 using RRCI.Dome;
 using System;
 using System.Collections;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -1134,7 +1135,18 @@ private DateTime lastPulseCheckTime =
         }
 
         public string DriverInfo => "Driver for Arduino Roof Controller";
-        public string DriverVersion => "1.1.12";
+        public string DriverVersion
+        {
+            get
+            {
+                Version v =
+                    Assembly.GetExecutingAssembly()
+                        .GetName()
+                        .Version;
+
+                return $"{v.Major}.{v.Minor}.{v.Build}";
+            }
+        }
         public short InterfaceVersion => 2;
         public string Name => "Rolling Roof Controller Interface";
         public string Description => "ASCOM Roof Controller";

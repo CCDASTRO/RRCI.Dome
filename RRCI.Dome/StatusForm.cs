@@ -13,6 +13,7 @@ namespace RRCI.Dome
 {
     public partial class StatusForm : Form
     {
+        private bool allowClose = false;
         public StatusForm()
         {
             InitializeComponent();
@@ -66,7 +67,25 @@ namespace RRCI.Dome
 
             progressRoof.Value = value;
         }
+        protected override void OnFormClosing(
+    FormClosingEventArgs e)
+        {
+            if (!allowClose &&
+                e.CloseReason ==
+                CloseReason.UserClosing)
+            {
+                e.Cancel = true;
 
+                this.WindowState =
+                    FormWindowState.Minimized;
+
+                return;
+            }
+
+            timer1.Enabled = false;
+
+            base.OnFormClosing(e);
+        }
         private void btnCalibrate_Click(
     object sender,
     EventArgs e)

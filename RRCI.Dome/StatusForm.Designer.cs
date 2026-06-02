@@ -50,7 +50,7 @@
             // lblPercent
             // 
             this.lblPercent.AutoSize = true;
-            this.lblPercent.Location = new System.Drawing.Point(11, 94);
+            this.lblPercent.Location = new System.Drawing.Point(12, 76);
             this.lblPercent.Name = "lblPercent";
             this.lblPercent.Size = new System.Drawing.Size(44, 13);
             this.lblPercent.TabIndex = 1;
@@ -59,7 +59,7 @@
             // lblPulses
             // 
             this.lblPulses.AutoSize = true;
-            this.lblPulses.Location = new System.Drawing.Point(12, 34);
+            this.lblPulses.Location = new System.Drawing.Point(12, 31);
             this.lblPulses.Name = "lblPulses";
             this.lblPulses.Size = new System.Drawing.Size(38, 13);
             this.lblPulses.TabIndex = 2;
@@ -68,7 +68,7 @@
             // lblFault
             // 
             this.lblFault.AutoSize = true;
-            this.lblFault.Location = new System.Drawing.Point(12, 62);
+            this.lblFault.Location = new System.Drawing.Point(12, 53);
             this.lblFault.Name = "lblFault";
             this.lblFault.Size = new System.Drawing.Size(30, 13);
             this.lblFault.TabIndex = 3;
@@ -76,9 +76,9 @@
             // 
             // progressRoof
             // 
-            this.progressRoof.Location = new System.Drawing.Point(78, 94);
+            this.progressRoof.Location = new System.Drawing.Point(12, 92);
             this.progressRoof.Name = "progressRoof";
-            this.progressRoof.Size = new System.Drawing.Size(100, 23);
+            this.progressRoof.Size = new System.Drawing.Size(178, 12);
             this.progressRoof.TabIndex = 4;
             // 
             // timer1
@@ -87,7 +87,7 @@
             // 
             // btnCalibrate
             // 
-            this.btnCalibrate.Location = new System.Drawing.Point(66, 134);
+            this.btnCalibrate.Location = new System.Drawing.Point(63, 110);
             this.btnCalibrate.Name = "btnCalibrate";
             this.btnCalibrate.Size = new System.Drawing.Size(75, 23);
             this.btnCalibrate.TabIndex = 5;
@@ -99,15 +99,14 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(211, 169);
-            this.ControlBox = false;
+            this.ClientSize = new System.Drawing.Size(202, 138);
             this.Controls.Add(this.btnCalibrate);
             this.Controls.Add(this.progressRoof);
             this.Controls.Add(this.lblFault);
             this.Controls.Add(this.lblPulses);
             this.Controls.Add(this.lblPercent);
             this.Controls.Add(this.lblState);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.Name = "StatusForm";
             this.Text = "Roof Status";
