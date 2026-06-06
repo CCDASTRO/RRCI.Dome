@@ -46,6 +46,15 @@ namespace RRCI.Dome
     EventArgs e)
         {
             //this.Text = $"P={RoofTelemetry.CurrentPulseCount} O={RoofTelemetry.OpenPulseCount} %={RoofTelemetry.PercentOpen}";
+
+            //this.Text = typeof(RoofTelemetry).Assembly.FullName;
+
+            //lblFault.Text =  AppDomain.CurrentDomain .GetAssemblies()
+            //  .Length
+            //  .ToString();
+
+            //this.Text = $"P={RoofTelemetry.CurrentPulseCount}  T={DateTime.Now:HH:mm:ss}";
+
             // Force telemetry refresh from the connected driver
             try
             {
@@ -64,6 +73,8 @@ namespace RRCI.Dome
                 "Position: " +
                 RoofTelemetry.PercentOpen +
                 "%";
+
+            System.Diagnostics.Debug.WriteLine("FORM Pulse=" + RoofTelemetry.CurrentPulseCount);
 
             lblPulses.Text =
                 "Pulses: " +
@@ -103,7 +114,7 @@ namespace RRCI.Dome
 
             base.OnFormClosing(e);
         }
-        private void btnCalibrate_Click(
+        private async void btnCalibrate_Click(
     object sender,
     EventArgs e)
         {
@@ -113,14 +124,21 @@ namespace RRCI.Dome
                     "Calibration starting.\n\n" +
                     "Roof will fully open.");
 
+                btnCalibrate.Enabled = false;
+
                 string result =
-                    driver.StartCalibration();
+                    await Task.Run(() =>
+                        driver.StartCalibration());
 
                 MessageBox.Show(result);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message);
+            }
+            finally
+            {
+                btnCalibrate.Enabled = true;
             }
         }
     }

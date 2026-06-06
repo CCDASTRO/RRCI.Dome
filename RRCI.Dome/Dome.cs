@@ -538,6 +538,8 @@ private DateTime lastPulseCheckTime =
                 RoofTelemetry.CurrentPulseCount = count;
                 tl.LogMessage("Telemetry", $"Pulse={RoofTelemetry.CurrentPulseCount}, Percent={RoofTelemetry.PercentOpen}");
                 tl.LogMessage("Telemetry", $"Current={count} Open={RoofTelemetry.OpenPulseCount} Percent={RoofTelemetry.PercentOpen}");
+                tl.LogMessage("PulseDebug", $"Assigned Count={count}");
+
                 // -------------------------------------
                 // Calculate roof percentage
                 // -------------------------------------
@@ -729,8 +731,12 @@ private DateTime lastPulseCheckTime =
                                 pulseText.Trim(),
                                 out int pulseCount))
                             {
+                                
+                                
                                 RoofTelemetry.CurrentPulseCount =
                                     pulseCount;
+
+                                tl.LogMessage("StatusPulse", $"PulseCount={pulseCount}");
 
                                 if (RoofTelemetry.OpenPulseCount > 0)
                                 {
@@ -779,6 +785,18 @@ private DateTime lastPulseCheckTime =
                     bool openSensorActive = status.Contains("STATE:OPEN;");
 
                     bool closedSensorActive = status.Contains("STATE:CLOSED;");
+
+                    // Controller forgot pulse count but roof is known open
+
+                    if (openSensorActive &&
+                        RoofTelemetry.CurrentPulseCount == 0 &&
+                        RoofTelemetry.OpenPulseCount > 0)
+                    {
+                        RoofTelemetry.CurrentPulseCount =
+                            RoofTelemetry.OpenPulseCount;
+
+                        RoofTelemetry.PercentOpen = 100;
+                    }
 
                     RoofTelemetry.OpenLimitActive =
                         openSensorActive;
@@ -925,9 +943,7 @@ private DateTime lastPulseCheckTime =
 
                     if (openSensorActive)
                     {
-                        RoofTelemetry.CurrentPulseCount =
-                            RoofTelemetry.OpenPulseCount;
-
+                        
                         RoofTelemetry.PercentOpen = 100;
 
                         RoofTelemetry.ShutterState = "Open";
@@ -1178,7 +1194,9 @@ private DateTime lastPulseCheckTime =
                     "Calibration",
                     $"Status={status}");
 
-                if (status.Contains("STATE:OPEN"))
+                
+
+                if (status.StartsWith("STATE:OPEN;", StringComparison.OrdinalIgnoreCase))
                 {
                     break;
                 }
@@ -1189,7 +1207,9 @@ private DateTime lastPulseCheckTime =
             // -------------------------------------
 
             string response =
-    Query("getpulsecount", 3000);
+                Query("getpulsecount", 3000);
+
+            tl.LogMessage("PulseDebug", $"Response={response}");
 
             int pulses = 0;
 
