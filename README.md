@@ -1,166 +1,333 @@
-RRCI Observatory Roof Controller
+# RRCI Observatory Roof Controller
 
-A robust ASCOM-compatible roll-off roof automation system for unattended observatory operation.
+## Overview
 
-Overview
+The Rolling Roof Controller Interface (RRCI) is an Arduino-based observatory roof automation system designed for reliable unattended operation of roll-off roof observatories.
 
-The Rolling Roof Controller Interface (RRCI) is an Arduino-based observatory roof control system paired with a custom ASCOM IDomeV2 driver for seamless integration with astronomy automation software such as NINA.
+RRCI combines custom firmware with a fully ASCOM-compliant Dome driver, allowing seamless integration with astronomy automation platforms such as NINA, ASCOM Device Hub, and other ASCOM-compatible software.
 
-The project evolved from a simple relay controller into a telemetry-driven automation platform featuring:
+Originally developed as a simple relay controller, RRCI has evolved into a telemetry-driven roof automation platform featuring:
 
-layered fault protection,
-pulse-monitored movement verification,
-live diagnostics,
-watchdog recovery,
-and observatory-grade operational safety.
-Key Features
-ASCOM Dome Driver
-Full IDomeV2 compatibility
-Native support for:
-OpenShutter()
-CloseShutter()
-AbortSlew()
-ShutterStatus
-Seamless integration with:
-NINA
-ASCOM Device Hub
-other ASCOM automation platforms
-Arduino Roof Controller
-Relay-based roof control
-Serial command protocol
-USB serial communication
-Reconnect-safe architecture
-Heartbeat monitoring
-Roof Safety Systems
-Layered Timeout Protection
+* Real-time roof position tracking
+* Pulse-based calibration and position estimation
+* Multi-layer fault protection
+* Live diagnostics and monitoring
+* Reconnect-safe operation
+* Multi-controller support
+* Observatory-grade unattended automation
 
-The controller implements multiple independent safety systems:
+---
 
-Hard Movement Timeout
+# Key Features
 
-Stops roof motion if travel exceeds the maximum expected duration.
+## ASCOM Dome Driver
 
-Hall Pulse Stall Detection
+Full ASCOM IDomeV2 compatibility including:
 
-Detects:
+* OpenShutter()
+* CloseShutter()
+* AbortSlew()
+* ShutterStatus
+* Connected state management
 
-motor stalls,
-mechanical jams,
-slipping drive systems,
-failed motion sensors.
+Compatible with:
 
-If roof movement is commanded but hall pulses stop:
+* NINA
+* ASCOM Device Hub
+* ASCOM Remote
+* Other ASCOM automation platforms
 
-the driver aborts motion,
-enters fault state,
-and reports an error to ASCOM clients.
-Overshoot Protection
+---
 
-Detects excessive pulse travel beyond calibrated roof limits.
+## Arduino Roof Controller
+
+Features include:
+
+* USB serial communications
+* Relay-based motor control
+* Heartbeat monitoring
+* Command-response protocol
+* Reconnect-safe architecture
+* Controller type selection
+
+Supported controller architectures:
+
+### Mode 1 – Aleko Single Button
+
+Single relay operation compatible with Aleko gate controllers.
+
+### Mode 2 – Open / Close
+
+Dedicated Open and Close control outputs.
+
+### Mode 3 – Open / Close / Stop
+
+Dedicated Open, Close, and Stop control outputs.
+
+Controller mode may be selected through the ASCOM Setup Dialog or serial command interface.
+
+---
+
+# Roof Position Tracking
+
+## Hall Pulse Telemetry
+
+Optional hall-effect motion sensing provides:
+
+* Motion verification
+* Pulse counting
+* Roof position estimation
+* Stall detection
+* Overshoot protection
+
+During calibration the roof is moved from fully closed to fully open and the total pulse count is recorded.
+
+The calibrated pulse count is stored and automatically restored on future connections.
+
+---
+
+## Limit Switch Verification
+
+Physical Open and Closed limit sensors provide positive confirmation of roof position.
+
+The system uses both:
+
+* Hall pulse telemetry
+* Open/Closed limit sensors
+
+to provide reliable roof position tracking.
+
+When limit sensors indicate a fully open or fully closed roof, they are treated as the authoritative position source.
+
+---
+
+## Reconnect Recovery
+
+If the controller reconnects after a restart and pulse information is unavailable:
+
+* Open sensor active → Roof restored to 100% open
+* Closed sensor active → Roof restored to 0% open
+
+Previously calibrated pulse counts are restored automatically to maintain accurate position reporting.
+
+---
+
+# Roof Safety Systems
+
+## Hard Movement Timeout
+
+Stops roof motion if travel exceeds the configured maximum movement time.
 
 Protects against:
 
-failed limit switches,
-runaway relays,
-uncontrolled motion.
-Motion Telemetry System
+* Stuck relays
+* Failed motor controllers
+* Communication errors
+* Runaway roof movement
 
-The system includes a real-time telemetry layer that tracks:
+---
 
-Roof movement state
-Open/closed sensor state
-Hall pulse count
-Roof percentage open
-Movement timing
-Fault conditions
+## Hall Pulse Stall Detection
+
+When pulse telemetry is enabled, the driver continuously verifies roof movement.
+
+If motion is commanded but pulses stop unexpectedly, the driver:
+
+* Stops motion
+* Enters fault state
+* Reports an error to ASCOM clients
+
+Protects against:
+
+* Mechanical jams
+* Failed motors
+* Slipping drive systems
+* Failed hall sensors
+
+---
+
+## Overshoot Protection
+
+Continuously monitors pulse travel distance.
+
+If travel exceeds the calibrated full-open pulse count plus tolerance, the driver:
+
+* Stops motion
+* Reports a fault condition
+
+Protects against:
+
+* Failed limit switches
+* Runaway relays
+* Controller malfunctions
+
+---
+
+# Telemetry System
+
+The telemetry layer continuously tracks:
+
+* Roof state
+* Open limit status
+* Closed limit status
+* Hall pulse count
+* Percent open
+* Motion state
+* Movement timing
+* Fault conditions
 
 Telemetry is synchronized across:
 
-Arduino firmware
-ASCOM driver
-live diagnostics UI
-Live Diagnostics Window
+* Arduino firmware
+* ASCOM driver
+* Diagnostics user interface
 
-A dedicated always-on-top monitor window provides real-time roof diagnostics.
+---
 
-Displays
-Roof state
-Percent open
-Hall pulse count
-Fault status
-Live progress bar
-Behavior
-Automatically opens on ASCOM connection
-Automatically closes on disconnect
-Runs independently from the driver COM thread
-Lightweight utility-window design
-Optional Hardware Support
+# Live Diagnostics Window
 
-The system supports both:
+A dedicated diagnostics window provides real-time operational monitoring.
 
-Basic Mode
-Limit-switch-only operation
-Enhanced Telemetry Mode
-Hall-effect motion sensing
-Pulse-based movement verification
-Position estimation
+## Displays
 
-Motion telemetry can be enabled or disabled in the setup dialog.
+* Roof state
+* Percent open
+* Hall pulse count
+* Motion status
+* Fault information
+* Progress bar
+* Calibration status
 
-Setup & Configuration
+## Behavior
 
-The ASCOM setup dialog allows configuration of:
+* Automatically opens on driver connection
+* Automatically closes on disconnect
+* Runs independently of ASCOM operations
+* Remains responsive during calibration and roof movement
+* Designed as a lightweight utility window
 
-COM Port
-Baud Rate
-Safe Mode
-Motion Sensor Enable
-Pulse Calibration
-Trace Logging
-Recommended Hardware
-Supported Components
-Arduino Uno / Nano
-USB serial interface
-Relay module
-Hall-effect sensor
-Open/closed limit switches
-Roll-off roof motor controller
-System Architecture
+---
+
+# Calibration System
+
+RRCI includes built-in pulse calibration.
+
+## Calibration Process
+
+1. Ensure the roof is fully closed.
+2. Start calibration from the Status Window.
+3. The roof opens completely.
+4. Total travel pulses are measured.
+5. The calibrated pulse count is automatically saved.
+
+Calibration values persist across:
+
+* Driver restarts
+* NINA restarts
+* Computer reboots
+
+No recalibration is required unless roof mechanics are changed.
+
+---
+
+# Setup & Configuration
+
+The ASCOM Setup Dialog provides configuration for:
+
+* COM Port
+* Baud Rate
+* Controller Type
+* Safe Mode
+* Motion Sensor Enable
+* Pulse Calibration
+* Trace Logging
+
+All settings are automatically saved and restored.
+
+---
+
+# Recommended Hardware
+
+## Supported Components
+
+* Arduino Uno
+* Arduino Nano
+* USB serial interface
+* Relay module
+* Hall-effect sensor (optional)
+* Open limit switch
+* Closed limit switch
+* Roll-off roof motor controller
+
+---
+
+# System Architecture
+
+```text
 NINA / ASCOM Client
-        ↓
+          ↓
 ASCOM Dome Driver
-        ↓
+          ↓
 Telemetry & Safety Layer
-        ↓
-USB Serial Protocol
-        ↓
+          ↓
+USB Serial Communications
+          ↓
 Arduino Roof Controller
-        ↓
-Relay Outputs / Sensors
-        ↓
+          ↓
+Motor Controller Relays
+          ↓
+Roof Sensors
+          ↓
 Observatory Roof
-Fault Handling Philosophy
+```
 
-The controller was designed around:
+---
 
-fail-safe operation,
-layered protection,
-and graceful recovery.
+# Fault Handling Philosophy
+
+RRCI is designed around:
+
+* Fail-safe operation
+* Layered protection
+* Defensive programming
+* Graceful recovery
 
 Multiple independent safety systems ensure:
 
-no single sensor failure can cause uncontrolled roof movement,
-faults are surfaced immediately,
-and observatory automation remains stable during unattended operation.
-Project Highlights
-Custom ASCOM Dome Driver
-Telemetry-driven roof monitoring
-Real-time diagnostics UI
-Pulse-based motion verification
-Overshoot/runaway protection
-Reconnect-safe serial handling
-Modular firmware architecture
-NINA-compatible unattended automation
-License - Personal / educational observatory automation project.
+* No single sensor failure can cause uncontrolled roof movement
+* Faults are immediately surfaced to automation software
+* Recovery after disconnects and controller restarts is automatic
+* Unattended observatory operation remains reliable
 
-Author - Chuck Faranda https://ccdastro.net
+---
+
+# Project Highlights
+
+* Custom ASCOM Dome Driver
+* Arduino-based roof controller
+* Multi-controller support
+* Pulse-based calibration
+* Live telemetry system
+* Real-time diagnostics window
+* Hall pulse motion verification
+* Stall detection
+* Overshoot protection
+* Reconnect-safe architecture
+* Persistent configuration storage
+* NINA-compatible unattended automation
+
+---
+
+# License
+
+Personal and educational observatory automation project.
+
+---
+
+# Author
+
+Chuck Faranda
+
+CCD Astro Observatory Automation
+
+https://ccdastro.net
