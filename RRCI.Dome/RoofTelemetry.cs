@@ -9,6 +9,7 @@ namespace RRCI.DomeDriver
 
         // User calibrated full-open pulse count
         public static int OpenPulseCount = 5000;
+        public static bool CalibrationRequested = false;
 
         // Calculated percentage open
         public static int PercentOpen = 0;

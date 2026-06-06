@@ -13,10 +13,13 @@ namespace RRCI.Dome
 {
     public partial class StatusForm : Form
     {
+        private RRCI.DomeDriver.Dome driver;
         private bool allowClose = false;
-        public StatusForm()
+        public StatusForm(RRCI.DomeDriver.Dome dome)
         {
             InitializeComponent();
+
+            driver = dome;
 
             lblState.Text = "Initializing";
             lblPercent.Text = "0%";
@@ -26,7 +29,6 @@ namespace RRCI.Dome
             this.TopMost = true;
 
             timer1.Interval = 250;
-
             timer1.Start();
         }
 
@@ -34,11 +36,26 @@ namespace RRCI.Dome
         {
 
         }
-
+        public void ForceClose()
+        {
+            allowClose = true;
+            Close();
+        }
         private void timer1_Tick(
     object sender,
     EventArgs e)
         {
+            //this.Text = $"P={RoofTelemetry.CurrentPulseCount} O={RoofTelemetry.OpenPulseCount} %={RoofTelemetry.PercentOpen}";
+            // Force telemetry refresh from the connected driver
+            try
+            {
+                var state =
+                    driver.ShutterStatus;
+            }
+            catch
+            {
+            }
+
             lblState.Text =
                 "Roof State: " +
                 RoofTelemetry.ShutterState;
@@ -92,16 +109,12 @@ namespace RRCI.Dome
         {
             try
             {
-                ASCOM.DriverAccess.Dome dome =
-                    new ASCOM.DriverAccess.Dome(
-                        "RRCI.Dome");
-
                 MessageBox.Show(
-                    "Calibration starting.\n\n"
-                    + "Roof will fully open.");
+                    "Calibration starting.\n\n" +
+                    "Roof will fully open.");
 
                 string result =
-                    dome.Action("Calibrate", "");
+                    driver.StartCalibration();
 
                 MessageBox.Show(result);
             }

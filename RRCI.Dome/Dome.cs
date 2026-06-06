@@ -179,10 +179,10 @@ private DateTime lastPulseCheckTime =
 
                 RoofTelemetry.PercentOpen = 0;
                 if (int.TryParse(
-    GetSetting(
-        "OpenPulseCount",
-        "5000"),
-    out int openPulses))
+                    GetSetting(
+                        "OpenPulseCount",
+                        "5000"),
+                    out int openPulses))
                 {
                     RoofTelemetry.OpenPulseCount =
                         openPulses;
@@ -190,6 +190,20 @@ private DateTime lastPulseCheckTime =
                 else
                 {
                     RoofTelemetry.OpenPulseCount = 5000;
+                }
+                tl.LogMessage("Connect", $"Loaded OpenPulseCount={RoofTelemetry.OpenPulseCount}");
+                using (Profile profile = new Profile())
+                {
+                    profile.DeviceType = "Dome";
+
+                    tl.LogMessage(
+                        "Connect",
+                        "Profile OpenPulseCount=" +
+                        profile.GetValue(
+                            DriverId,
+                            "OpenPulseCount",
+                            "",
+                            "NOTFOUND"));
                 }
                 RoofTelemetry.Moving = false;
 
@@ -212,6 +226,54 @@ private DateTime lastPulseCheckTime =
 
                 Query(SafeModeEnabled ? "setsafe:1" : "setsafe:0");
                 Query(MotionSensorEnabled ? "setmotion:1" : "setmotion:0");
+
+                try
+                {
+                    UpdatePulseTelemetry();
+
+                    string startupStatus =
+                        Query("status", 3000)
+                        .ToUpperInvariant();
+
+                    tl.LogMessage(
+                        "Connect",
+                        $"Startup Status={startupStatus}");
+
+                    if (startupStatus.Contains("STATE:OPEN;"))
+                    {
+                        RoofTelemetry.CurrentPulseCount =
+                            RoofTelemetry.OpenPulseCount;
+
+                        RoofTelemetry.PercentOpen = 100;
+
+                        RoofTelemetry.ShutterState =
+                            "Open";
+                    }
+                    else if (startupStatus.Contains("STATE:CLOSED;"))
+                    {
+                        RoofTelemetry.CurrentPulseCount = 0;
+
+                        RoofTelemetry.PercentOpen = 0;
+
+                        RoofTelemetry.ShutterState =
+                            "Closed";
+                    }
+
+                    tl.LogMessage(
+                        "Connect",
+                        $"Initial PulseCount={RoofTelemetry.CurrentPulseCount}");
+
+                    tl.LogMessage(
+                        "Connect",
+                        $"Initial PercentOpen={RoofTelemetry.PercentOpen}");
+                }
+                catch (Exception ex)
+                {
+                    tl.LogMessage(
+                        "Connect",
+                        $"Initial telemetry failed: {ex.Message}");
+                }
+
                 string controllerType = GetSetting( "ControllerType", "1");
 
                 Query("setmode:" + controllerType);
@@ -227,7 +289,7 @@ private DateTime lastPulseCheckTime =
                 {
                     statusThread = new Thread(() =>
                     {
-                        statusForm = new StatusForm();
+                        statusForm = new StatusForm(this);
 
                         Application.Run(statusForm);
                     });
@@ -279,7 +341,7 @@ private DateTime lastPulseCheckTime =
                     statusForm.Invoke(
                         new Action(() =>
                         {
-                            statusForm.Close();
+                            statusForm.ForceClose();
                         }));
                 }
                 catch
@@ -473,10 +535,9 @@ private DateTime lastPulseCheckTime =
                 // -------------------------------------
                 // Update telemetry
                 // -------------------------------------
-
-                RoofTelemetry.CurrentPulseCount =
-                    count;
-
+                RoofTelemetry.CurrentPulseCount = count;
+                tl.LogMessage("Telemetry", $"Pulse={RoofTelemetry.CurrentPulseCount}, Percent={RoofTelemetry.PercentOpen}");
+                tl.LogMessage("Telemetry", $"Current={count} Open={RoofTelemetry.OpenPulseCount} Percent={RoofTelemetry.PercentOpen}");
                 // -------------------------------------
                 // Calculate roof percentage
                 // -------------------------------------
@@ -642,6 +703,54 @@ private DateTime lastPulseCheckTime =
                 {
                     string status = Query("status").ToUpperInvariant();
 
+                    // -------------------------------------
+                    // Extract pulse count from status reply
+                    // -------------------------------------
+
+                    try
+                    {
+                        int pulsePos = status.IndexOf("PULSES:");
+
+                        if (pulsePos >= 0)
+                        {
+                            string pulseText =
+                                status.Substring(pulsePos + 7);
+
+                            int endPos =
+                                pulseText.IndexOf(';');
+
+                            if (endPos >= 0)
+                            {
+                                pulseText =
+                                    pulseText.Substring(0, endPos);
+                            }
+
+                            if (int.TryParse(
+                                pulseText.Trim(),
+                                out int pulseCount))
+                            {
+                                RoofTelemetry.CurrentPulseCount =
+                                    pulseCount;
+
+                                if (RoofTelemetry.OpenPulseCount > 0)
+                                {
+                                    RoofTelemetry.PercentOpen =
+                                        Math.Max(
+                                            0,
+                                            Math.Min(
+                                                100,
+                                                (int)(
+                                                    pulseCount *
+                                                    100.0 /
+                                                    RoofTelemetry.OpenPulseCount)));
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
                     // -------------------------------------------------
                     // Controller-reported error
                     // -------------------------------------------------
@@ -667,13 +776,9 @@ private DateTime lastPulseCheckTime =
                     // Sensor states
                     // -------------------------------------------------
 
-                    bool openSensorActive =
-                        status.Contains("STATE:OPEN") ||
-                        status.Contains("OPEN;");
+                    bool openSensorActive = status.Contains("STATE:OPEN;");
 
-                    bool closedSensorActive =
-                        status.Contains("STATE:CLOSED") ||
-                        status.Contains("CLOSED;");
+                    bool closedSensorActive = status.Contains("STATE:CLOSED;");
 
                     RoofTelemetry.OpenLimitActive =
                         openSensorActive;
@@ -684,14 +789,14 @@ private DateTime lastPulseCheckTime =
                     // -------------------------------------------------
                     // Motion handling
                     // -------------------------------------------------
-
+                    UpdatePulseTelemetry();
                     if (moving)
                     {
                         // -------------------------------------
                         // Update hall pulse telemetry
                         // -------------------------------------
 
-                        UpdatePulseTelemetry();
+                        
 
                         double elapsed =
                             (DateTime.Now - motionStartTime)
@@ -733,6 +838,8 @@ private DateTime lastPulseCheckTime =
                         {
                             if (openingCommandActive)
                             {
+
+                                UpdatePulseTelemetry();
                                 RoofTelemetry.ShutterState =
                                     "Opening";
 
@@ -756,6 +863,7 @@ private DateTime lastPulseCheckTime =
 
                         if (openingCommandActive)
                         {
+                            UpdatePulseTelemetry();
                             RoofTelemetry.ShutterState =
                                 "Opening";
 
@@ -817,6 +925,11 @@ private DateTime lastPulseCheckTime =
 
                     if (openSensorActive)
                     {
+                        RoofTelemetry.CurrentPulseCount =
+                            RoofTelemetry.OpenPulseCount;
+
+                        RoofTelemetry.PercentOpen = 100;
+
                         RoofTelemetry.ShutterState = "Open";
 
                         RoofTelemetry.Faulted = false;
@@ -828,6 +941,10 @@ private DateTime lastPulseCheckTime =
 
                     if (closedSensorActive)
                     {
+                        RoofTelemetry.CurrentPulseCount = 0;
+
+                        RoofTelemetry.PercentOpen = 0;
+
                         RoofTelemetry.ShutterState = "Closed";
 
                         RoofTelemetry.Faulted = false;
@@ -861,6 +978,39 @@ private DateTime lastPulseCheckTime =
 
                         return lastKnownShutterState =
                             ShutterState.shutterClosing;
+                    }
+
+                    // -------------------------------------------------
+                    // Controller reports IDLE while roof moving
+                    // -------------------------------------------------
+
+                    if (status.Contains("STATE:IDLE"))
+                    {
+                        if (moving)
+                        {
+                            if (openingCommandActive)
+                            {
+                                RoofTelemetry.ShutterState =
+                                    "Opening";
+
+                                return lastKnownShutterState =
+                                    ShutterState.shutterOpening;
+                            }
+
+                            if (closingCommandActive)
+                            {
+                                RoofTelemetry.ShutterState =
+                                    "Closing";
+
+                                return lastKnownShutterState =
+                                    ShutterState.shutterClosing;
+                            }
+                        }
+
+                        RoofTelemetry.ShutterState =
+                            "Idle";
+
+                        return lastKnownShutterState;
                     }
 
                     // -------------------------------------------------
@@ -980,6 +1130,13 @@ private DateTime lastPulseCheckTime =
             RoofTelemetry.LastPulseTime =
                 DateTime.Now;
         }
+
+        public string StartCalibration()
+        {
+            CalibrateOpenPulses();
+
+            return "Calibration Complete";
+        }
         private void CalibrateOpenPulses()
         {
             EnsureConnected();
@@ -1003,7 +1160,7 @@ private DateTime lastPulseCheckTime =
             OpenShutter();
 
             // -------------------------------------
-            // Wait for completion
+            // Wait for roof fully open
             // -------------------------------------
 
             DateTime timeout =
@@ -1013,20 +1170,17 @@ private DateTime lastPulseCheckTime =
             {
                 Thread.Sleep(500);
 
-                ShutterState state =
-                    ShutterStatus;
+                string status =
+                    Query("status", 3000)
+                    .ToUpperInvariant();
 
-                if (state ==
-                    ShutterState.shutterOpen)
+                tl.LogMessage(
+                    "Calibration",
+                    $"Status={status}");
+
+                if (status.Contains("STATE:OPEN"))
                 {
                     break;
-                }
-
-                if (state ==
-                    ShutterState.shutterError)
-                {
-                    throw new DriverException(
-                        "Calibration failed");
                 }
             }
 
@@ -1034,8 +1188,31 @@ private DateTime lastPulseCheckTime =
             // Final pulse count
             // -------------------------------------
 
-            int pulses =
-                RoofTelemetry.CurrentPulseCount;
+            string response =
+    Query("getpulsecount", 3000);
+
+            int pulses = 0;
+
+            string pulseText =
+                response.Replace("PULSES:", "")
+                        .Replace("#", "")
+                        .Trim();
+
+            int.TryParse(
+                pulseText,
+                out pulses);
+
+            tl.LogMessage(
+                "Calibration",
+                $"Raw response={response}");
+
+            tl.LogMessage(
+                "Calibration",
+                $"Pulse text={pulseText}");
+
+            tl.LogMessage(
+                "Calibration",
+                $"Parsed pulses={pulses}");
 
             // Add 2% tolerance
             pulses =
@@ -1052,16 +1229,23 @@ private DateTime lastPulseCheckTime =
                 new Profile())
             {
                 profile.DeviceType = "Dome";
-
+                tl.LogMessage("Calibration", $"Saving OpenPulseCount={pulses}");
                 profile.WriteValue(
                     DriverId,
                     "OpenPulseCount",
                     pulses.ToString());
-            }
 
-            tl.LogMessage(
-                "Calibration",
-                $"OpenPulseCount={pulses}");
+                string verify =
+                    profile.GetValue(
+                        DriverId,
+                        "OpenPulseCount",
+                        "",
+                        "NOTFOUND");
+
+                tl.LogMessage(
+                    "Calibration",
+                    $"Verified OpenPulseCount={verify}");
+            }
         }
         public void AbortSlew()
         {
