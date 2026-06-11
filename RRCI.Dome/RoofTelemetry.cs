@@ -4,6 +4,24 @@ namespace RRCI.DomeDriver
 {
     public static class RoofTelemetry
     {
+        //Pushover state
+
+        public static bool EnablePushover = false;
+
+        public static string PushoverToken = "";
+
+        public static string PushoverUserKey = "";
+
+        public static bool NotifyRoofOpened = true;
+
+        public static bool NotifyRoofClosed = true;
+
+        public static bool NotifyRoofFault = true;
+
+        public static bool NotifyConnectionLost = true;
+
+        public static bool NotifyConnectionRestored = true;
+
         // Pulse tracking
         public static int CurrentPulseCount = 0;
 

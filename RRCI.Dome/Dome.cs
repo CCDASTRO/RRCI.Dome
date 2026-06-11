@@ -45,8 +45,70 @@ private DateTime lastPulseCheckTime =
         {
             tl = new TraceLogger("", DriverId);
             tl.Enabled = TraceEnabled;
+
             supportedActions.Add("Calibrate");
-            tl.LogMessage("Constructor", "Driver starting");
+
+            RoofTelemetry.EnablePushover =
+                GetSetting(
+                    "EnablePushover",
+                    "False")
+                .Equals(
+                    "True",
+                    StringComparison.OrdinalIgnoreCase);
+
+            RoofTelemetry.PushoverToken =
+                GetSetting(
+                    "PushoverToken",
+                    "");
+
+            RoofTelemetry.PushoverUserKey =
+                GetSetting(
+                    "PushoverUserKey",
+                    "");
+
+            RoofTelemetry.NotifyRoofOpened =
+                GetSetting(
+                    "NotifyRoofOpened",
+                    "True")
+                .Equals(
+                    "True",
+                    StringComparison.OrdinalIgnoreCase);
+
+            RoofTelemetry.NotifyRoofClosed =
+                GetSetting(
+                    "NotifyRoofClosed",
+                    "True")
+                .Equals(
+                    "True",
+                    StringComparison.OrdinalIgnoreCase);
+
+            RoofTelemetry.NotifyRoofFault =
+                GetSetting(
+                    "NotifyRoofFault",
+                    "True")
+                .Equals(
+                    "True",
+                    StringComparison.OrdinalIgnoreCase);
+
+            RoofTelemetry.NotifyConnectionLost =
+                GetSetting(
+                    "NotifyConnectionLost",
+                    "True")
+                .Equals(
+                    "True",
+                    StringComparison.OrdinalIgnoreCase);
+
+            RoofTelemetry.NotifyConnectionRestored =
+                GetSetting(
+                    "NotifyConnectionRestored",
+                    "True")
+                .Equals(
+                    "True",
+                    StringComparison.OrdinalIgnoreCase);
+
+            tl.LogMessage(
+                "Constructor",
+                "Driver starting");
         }
 
         #region COM Registration
@@ -138,6 +200,57 @@ private DateTime lastPulseCheckTime =
             }
         }
 
+        private async void SendNotification(
+            NotificationType type,
+            string message)
+        {
+            if (!RoofTelemetry.EnablePushover)
+            {
+                return;
+            }
+
+            bool enabled = false;
+
+            switch (type)
+            {
+                case NotificationType.RoofOpened:
+                    enabled =
+                        RoofTelemetry.NotifyRoofOpened;
+                    break;
+
+                case NotificationType.RoofClosed:
+                    enabled =
+                        RoofTelemetry.NotifyRoofClosed;
+                    break;
+
+                case NotificationType.RoofFault:
+                    enabled =
+                        RoofTelemetry.NotifyRoofFault;
+                    break;
+
+                case NotificationType.ConnectionLost:
+                    enabled =
+                        RoofTelemetry.NotifyConnectionLost;
+                    break;
+
+                case NotificationType.ConnectionRestored:
+                    enabled =
+                        RoofTelemetry.NotifyConnectionRestored;
+                    break;
+            }
+
+            if (!enabled)
+            {
+                return;
+            }
+
+            tl.LogMessage("Pushover", message);
+
+            await PushoverNotifier.SendAsync(
+                RoofTelemetry.PushoverToken,
+                RoofTelemetry.PushoverUserKey,
+                message);
+        }
         private void Connect()
         {
             tl.LogMessage("Connect", "Connecting");
@@ -882,6 +995,7 @@ private DateTime lastPulseCheckTime =
                         if (openingCommandActive)
                         {
                             UpdatePulseTelemetry();
+
                             RoofTelemetry.ShutterState =
                                 "Opening";
 
@@ -898,12 +1012,15 @@ private DateTime lastPulseCheckTime =
                                 RoofTelemetry.Faulted = false;
                                 RoofTelemetry.FaultMessage = "";
 
+                                SendNotification(
+                                    NotificationType.RoofOpened,
+                                    "🏠 RRCI roof opened");
+
                                 return lastKnownShutterState =
                                     ShutterState.shutterOpen;
                             }
 
-                            return ShutterState
-                                .shutterOpening;
+                            return ShutterState.shutterOpening;
                         }
 
                         // ---------------------------------------------
@@ -928,6 +1045,10 @@ private DateTime lastPulseCheckTime =
                                 RoofTelemetry.Faulted = false;
                                 RoofTelemetry.FaultMessage = "";
 
+                                SendNotification(
+                                    NotificationType.RoofClosed,
+                                    "🏠 RRCI roof closed");
+
                                 return lastKnownShutterState =
                                     ShutterState.shutterClosed;
                             }
@@ -950,7 +1071,8 @@ private DateTime lastPulseCheckTime =
 
                         RoofTelemetry.Faulted = false;
                         RoofTelemetry.FaultMessage = "";
-
+                        
+                        
                         return lastKnownShutterState =
                             ShutterState.shutterOpen;
                     }

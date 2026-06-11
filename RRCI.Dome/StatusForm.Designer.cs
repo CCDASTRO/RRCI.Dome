@@ -78,7 +78,7 @@
             // 
             this.progressRoof.Location = new System.Drawing.Point(12, 92);
             this.progressRoof.Name = "progressRoof";
-            this.progressRoof.Size = new System.Drawing.Size(178, 12);
+            this.progressRoof.Size = new System.Drawing.Size(171, 12);
             this.progressRoof.TabIndex = 4;
             // 
             // timer1
@@ -87,7 +87,7 @@
             // 
             // btnCalibrate
             // 
-            this.btnCalibrate.Location = new System.Drawing.Point(63, 110);
+            this.btnCalibrate.Location = new System.Drawing.Point(57, 110);
             this.btnCalibrate.Name = "btnCalibrate";
             this.btnCalibrate.Size = new System.Drawing.Size(75, 23);
             this.btnCalibrate.TabIndex = 5;
@@ -99,7 +99,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(202, 138);
+            this.ClientSize = new System.Drawing.Size(197, 142);
             this.Controls.Add(this.btnCalibrate);
             this.Controls.Add(this.progressRoof);
             this.Controls.Add(this.lblFault);
