@@ -35,8 +35,9 @@ namespace RRCI.DomeDriver
         private StatusForm statusForm;
         private Thread statusThread;
         private int lastPulseCount = 0;
+        private bool connectionLostNotified = false;
 
-private DateTime lastPulseCheckTime =
+        private DateTime lastPulseCheckTime =
     DateTime.MinValue;
 
         private ShutterState lastKnownShutterState = ShutterState.shutterError;
@@ -427,6 +428,11 @@ private DateTime lastPulseCheckTime =
                 connected = false;
                 StopHeartbeat();
                 CleanupSerial();
+
+                SendNotification(
+                   NotificationType.ConnectionLost,
+                   "⚠ RRCI communication lost");
+
                 throw;
             }
         }
@@ -543,11 +549,37 @@ private DateTime lastPulseCheckTime =
             try
             {
                 if (connected && serial != null)
+                {
                     Query("ping", 2000);
+
+                    if (connectionLostNotified)
+                    {
+                        tl?.LogMessage(
+                            "Heartbeat",
+                            "Connection restored");
+
+                        connectionLostNotified = false;
+
+                        SendNotification(
+                            NotificationType.ConnectionRestored,
+                            "✓ RRCI communication restored");
+                    }
+                }
             }
             catch (Exception ex)
             {
-                tl?.LogMessage("Heartbeat", ex.Message);
+                tl?.LogMessage(
+                    "Heartbeat",
+                    ex.Message);
+
+                if (!connectionLostNotified)
+                {
+                    connectionLostNotified = true;
+
+                    SendNotification(
+                        NotificationType.ConnectionLost,
+                        "⚠ RRCI communication lost");
+                }
             }
         }
 
@@ -741,6 +773,9 @@ private DateTime lastPulseCheckTime =
 
                         RoofTelemetry.FaultMessage =
                             "Hall pulse timeout";
+                        SendNotification(
+                             NotificationType.RoofFault,
+                             $"⚠ Roof fault: {RoofTelemetry.FaultMessage}");
 
                         RoofTelemetry.ShutterState =
                             "Error";
@@ -788,7 +823,11 @@ private DateTime lastPulseCheckTime =
 
                         RoofTelemetry.FaultMessage =
                             "Pulse overshoot detected";
-
+                        
+                        SendNotification(
+                            NotificationType.RoofFault,
+                            $"⚠ Roof fault: {RoofTelemetry.FaultMessage}");
+                        
                         RoofTelemetry.ShutterState =
                             "Error";
 
@@ -885,6 +924,10 @@ private DateTime lastPulseCheckTime =
                         RoofTelemetry.FaultMessage =
                             "Controller reported error";
 
+                        SendNotification(
+                            NotificationType.RoofFault,
+                            $"⚠ Roof fault: {RoofTelemetry.FaultMessage}");
+
                         RoofTelemetry.ShutterState = "Error";
 
                         return lastKnownShutterState =
@@ -953,6 +996,10 @@ private DateTime lastPulseCheckTime =
 
                             RoofTelemetry.FaultMessage =
                                 "Hard movement timeout";
+
+                            SendNotification(
+                            NotificationType.RoofFault,
+                            $"⚠ Roof fault: {RoofTelemetry.FaultMessage}");
 
                             RoofTelemetry.ShutterState =
                                 "Error";
@@ -1174,6 +1221,11 @@ private DateTime lastPulseCheckTime =
 
                     RoofTelemetry.FaultMessage =
                         ex.Message;
+
+                    SendNotification(
+                            NotificationType.RoofFault,
+                            $"⚠ Roof fault: {RoofTelemetry.FaultMessage}");
+
 
                     RoofTelemetry.ShutterState = "Error";
 
