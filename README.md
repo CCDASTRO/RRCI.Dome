@@ -188,6 +188,64 @@ Telemetry is synchronized across:
 
 A dedicated diagnostics window provides real-time operational monitoring.
 
+---
+
+# Pushover Notifications
+
+RRCI includes optional Pushover notification support, allowing observatory status messages to be delivered directly to a mobile device or desktop.
+
+Notifications are generated only on state transitions to prevent duplicate messages during normal polling operations.
+
+## Supported Notifications
+
+User-selectable notification types include:
+
+* Roof Opened
+* Roof Closed
+* Roof Fault Detected
+* Communication Lost
+* Communication Restored
+
+Each notification type may be enabled or disabled independently through the ASCOM Setup Dialog.
+
+## Configuration
+
+The Setup Dialog provides:
+
+* Enable Pushover Notifications
+* Pushover Application Token
+* Pushover User Key
+* Individual notification selection checkboxes
+
+All notification settings are automatically saved and restored through the ASCOM Profile system.
+
+## Test Notification
+
+A built-in Test Notification button allows verification of Pushover configuration without operating the roof.
+
+Successful configuration results in an immediate test message being delivered to the configured Pushover account.
+
+## Communication Monitoring
+
+RRCI continuously monitors controller communications using a heartbeat system.
+
+If communications are interrupted, a notification can be generated indicating loss of controller connectivity. When communications are restored, a corresponding restoration notification may be sent.
+
+## Fault Notifications
+
+Fault notifications are generated when the driver detects conditions that may require operator attention, including:
+
+* Motion timeout events
+* Pulse telemetry failures
+* Calibration-related faults
+* Safety system faults
+* Controller communication errors
+
+These notifications provide immediate awareness of abnormal roof operation during unattended observatory sessions.
+
+---
+
+
 ## Displays
 
 * Roof state
